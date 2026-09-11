@@ -6,9 +6,8 @@
 
 **Este README é um esqueleto (B0).** A versão completa — badges, diagrama de arquitetura,
 decisão de nuvem, quick start, tabela de latência e o mapa dos 6 critérios do enunciado — entra
-no bloco B9. Enquanto isso, o contrato do projeto vive em
-[`ARQUITETURA.md`](../fiap-mlet-graduation/tech-challenge-03/ARQUITETURA.md) (fora deste repo,
-no sandbox de processo).
+no bloco B9, à medida que cada peça for implementada. Até lá, as decisões de cada etapa ficam
+documentadas em `docs/` (dataset, model card, ADRs) conforme os arquivos entram no repo.
 
 ## Status
 

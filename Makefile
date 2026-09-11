@@ -1,4 +1,4 @@
-.PHONY: install lint format test validate clean
+.PHONY: install lint format test validate data clean
 
 # ── Setup ──────────────────────────────────────────────────────────
 install:
@@ -19,6 +19,10 @@ format:
 # ── Testes ────────────────────────────────────────────────────────
 test:
 	poetry run pytest tests/ -v --tb=short --cov=src --cov-report=term-missing
+
+# ── Dados ─────────────────────────────────────────────────────────
+data:
+	poetry run python -m src.data.pipeline
 
 # ── Limpeza ───────────────────────────────────────────────────────
 clean:
