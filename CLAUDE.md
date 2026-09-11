@@ -1,10 +1,10 @@
 # CLAUDE.md — triagem_medica_nlp
 
-Repo oficial do Tech Challenge Fase 03 (FIAP Pós-Tech MLET). O contrato técnico completo está em
-`ARQUITETURA.md`, no sandbox `/home/lucas/projects/fiap-mlet-graduation/tech-challenge-03/` — não
-neste repo. A ordem e o escopo de cada etapa estão em `BLOCOS_EXECUCAO.md`, no mesmo sandbox.
-
-Toda sessão que trabalhar aqui deve ler os dois antes de escrever código.
+Repo oficial do Tech Challenge Fase 03 (FIAP Pós-Tech MLET) — triagem automática de laudos
+médicos por urgência. Este arquivo traz comandos, arquitetura do repo e as regras de trabalho
+válidas para toda sessão. Documentos de planejamento (contrato de arquitetura, ordem dos
+blocos de execução) não vivem neste repo — uma sessão que precisar deles recebe os caminhos
+pelo prompt de abertura.
 
 ## Regras que valem para todos os blocos
 
@@ -16,16 +16,15 @@ Toda sessão que trabalhar aqui deve ler os dois antes de escrever código.
 6. **Sem `print()`.** `from src.utils.logger import get_logger`.
 7. **`set_global_seed()`** antes de qualquer split ou treino.
 8. **Definition of Done do bloco é a lista de aceite** — todos os itens verificados **rodando**, não "o arquivo existe".
-9. **Se algo do `ARQUITETURA.md` estiver errado na prática, avisar e propor** — não improvisar em silêncio.
+9. **Se uma decisão de arquitetura já registrada não funcionar na prática, avisar e propor uma alternativa** — não improvisar em silêncio.
 10. **Onde cada coisa mora:**
-    - Todo o código vive só aqui. Não existe espelho no sandbox.
-    - O sandbox `fiap-mlet-graduation/tech-challenge-03/` guarda só processo: `ARQUITETURA.md`, `BLOCOS_EXECUCAO.md`, `PLANO_ACAO_FASE03.md`, `docs/jornada.md`, `docs/defesa_tecnica.md`, o PDF do enunciado.
-    - Entregáveis (model card, `dataset.md`, `latencia.md`, `arquitetura_nuvem.md`, ADRs, roteiro do vídeo, prints) vão para `docs/` **deste repo** — sustentam a nota.
-    - O arquivamento do código no sandbox acontece uma vez, depois da entrega (B11).
-11. **Consultar o material oficial do curso antes de improvisar.** Fica em `fiap-mlet-graduation/aulas/referencias/materiais-mlet-main/fase-03-deploy-e-servir-modelos/`. O mapa "peça nossa → arquivo da aula" está em `ARQUITETURA.md` §11.
+    - Todo o código vive só aqui.
+    - Entregáveis (model card, `dataset.md`, `latencia.md`, `arquitetura_nuvem.md`, ADRs, roteiro do vídeo, prints) vão para `docs/` deste repo — sustentam a nota.
+11. **O repo é autocontido.** Uma decisão que precisa de justificativa é explicada no próprio arquivo ou citada via `docs/` deste repo (`dataset.md`, `model_card.md`, `adr/`, README) — nunca por referência a um documento ou caminho que só existe fora do repo. O repo vai ficar público; quem avalia não tem acesso a nada fora daqui.
 
 ## `airflow/`
 
 Já existe no repo, criado antes do B0. **Não sobrescrever nem mover** — Airflow 3.1.5,
-`LocalExecutor` + Postgres, decisão já validada pelo Lucas (`ARQUITETURA.md` §6.1). É integrado
-ao compose raiz sob o perfil `airflow` no B6.
+`LocalExecutor` + Postgres, versão e executor já testados de ponta a ponta localmente (o
+`airflow standalone` usa `SequentialExecutor`, sem paralelismo, e não reflete como Airflow
+roda em produção). Integrado ao compose raiz sob o perfil `airflow` no B6.

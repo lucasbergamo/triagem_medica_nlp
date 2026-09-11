@@ -1,8 +1,8 @@
 """Configuração central do projeto — Pydantic Settings lidas de ambiente/.env.
 
 Todo caminho usado pelo projeto (dados, modelos, métricas) deriva de PROJECT_ROOT aqui,
-nunca de caminho relativo ao cwd — a task da DAG do Airflow roda com cwd diferente
-(ver ARQUITETURA.md §6.3, regra 11).
+nunca de caminho relativo ao cwd — no container do Airflow o cwd é `/opt/airflow`, não a
+raiz do projeto.
 """
 
 from pathlib import Path

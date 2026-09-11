@@ -23,7 +23,8 @@ ENV/
 .ipynb_checkpoints/
 *.ipynb_checkpoints
 
-# Dados — bronze é comitado intencionalmente (CSV público, sem DVC — ARQUITETURA.md §2.3).
+# Dados — bronze é comitado intencionalmente (CSV público, ~18MB, sem DVC — o volume não
+# justifica a dependência extra, e garante que um clone reproduza os dados offline).
 # silver/gold são derivados, regenerados por `make data`.
 data/silver/*
 !data/silver/.gitkeep
