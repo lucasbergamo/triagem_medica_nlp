@@ -1,7 +1,7 @@
 """Orquestra o pipeline completo de dados: bronze → silver → gold.
 
 Delega para o `main()` de cada camada em vez de duplicar lógica — é o mesmo caminho que a
-task `preparacao` da DAG do Airflow chama (B6), só que num comando só para uso local/`make
+task `preparacao` da DAG do Airflow chama, só que num comando só para uso local/`make
 data` (mesmo padrão do TC2).
 """
 

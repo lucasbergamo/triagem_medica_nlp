@@ -4,10 +4,10 @@
 > urgência, com o ciclo de vida completo do modelo (deploy, monitoramento, CI/CD, orquestração)
 > como foco de avaliação — não a acurácia do classificador.
 
-**Este README é um esqueleto (B0).** A versão completa — badges, diagrama de arquitetura,
-decisão de nuvem, quick start, tabela de latência e o mapa dos 6 critérios do enunciado — entra
-no bloco B9, à medida que cada peça for implementada. Até lá, as decisões de cada etapa ficam
-documentadas em `docs/` (dataset, model card, ADRs) conforme os arquivos entram no repo.
+**Este README é um esqueleto.** A versão completa — badges, diagrama de arquitetura,
+decisão de nuvem, quick start, tabela de latência e o mapa dos 6 critérios do enunciado — é
+escrita ao final, quando cada peça já estiver implementada. Até lá, as decisões de cada etapa
+ficam documentadas em `docs/` (dataset, model card, ADRs) conforme os arquivos entram no repo.
 
 ## Status
 
