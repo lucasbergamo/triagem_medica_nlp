@@ -1,4 +1,4 @@
-.PHONY: install lint format test validate data clean
+.PHONY: install lint format test validate data train eval promote clean
 
 # ── Setup ──────────────────────────────────────────────────────────
 install:
@@ -23,6 +23,16 @@ test:
 # ── Dados ─────────────────────────────────────────────────────────
 data:
 	poetry run python -m src.data.pipeline
+
+# ── Modelo ────────────────────────────────────────────────────────
+train:
+	poetry run python -m src.models.train
+
+eval:
+	poetry run python -m src.models.evaluate
+
+promote:
+	poetry run python -m src.models.registry
 
 # ── Limpeza ───────────────────────────────────────────────────────
 clean:

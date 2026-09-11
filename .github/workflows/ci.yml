@@ -49,4 +49,5 @@ jobs:
       - name: Rodar testes com cobertura
         run: poetry run pytest tests/ -v --tb=short --cov=src --cov-report=term-missing
 
-  # dag-validate e build entram no B7.
+  # dag-validate (validação da DAG do Airflow) e build (smoke test do container da API)
+  # ainda entram.

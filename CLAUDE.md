@@ -24,7 +24,8 @@ pelo prompt de abertura.
 
 ## `airflow/`
 
-Já existe no repo, criado antes do B0. **Não sobrescrever nem mover** — Airflow 3.1.5,
-`LocalExecutor` + Postgres, versão e executor já testados de ponta a ponta localmente (o
-`airflow standalone` usa `SequentialExecutor`, sem paralelismo, e não reflete como Airflow
-roda em produção). Integrado ao compose raiz sob o perfil `airflow` no B6.
+Já existe no repo, criado antes do início do desenvolvimento em código. **Não sobrescrever
+nem mover** — Airflow 3.1.5, `LocalExecutor` + Postgres, versão e executor já testados de
+ponta a ponta localmente (o `airflow standalone` usa `SequentialExecutor`, sem paralelismo, e
+não reflete como Airflow roda em produção). Integração ao compose raiz sob o perfil `airflow`
+é a etapa de orquestração ainda pendente.

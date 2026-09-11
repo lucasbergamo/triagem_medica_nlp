@@ -76,7 +76,7 @@ coverage.xml
 .ruff_cache/
 .pytest_cache/
 
-# Terraform (B8) — state contém dados sensíveis e é específico da conta AWS
+# Terraform — state contém dados sensíveis e é específico da conta AWS
 # (.terraform.lock.hcl NÃO entra aqui — fixa a versão exata do provider, mesmo
 # princípio do poetry.lock)
 infra/.terraform/

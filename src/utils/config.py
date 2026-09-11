@@ -14,10 +14,10 @@ class Settings(BaseSettings):
     seed: int = 42
     log_level: str = "INFO"
 
-    # Strategy de inferência selecionável em runtime (src/models/predictor.py, B3/B4)
+    # Strategy de inferência selecionável em runtime (src/models/predictor.py)
     model_backend: str = "sklearn"  # sklearn | onnx | onnx-int8
 
-    # Gate de qualidade do treino (src/models/evaluate.py, B2)
+    # Gate de qualidade do treino (src/models/evaluate.py)
     min_macro_f1: float = 0.50
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")

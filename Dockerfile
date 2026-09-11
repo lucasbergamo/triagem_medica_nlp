@@ -68,4 +68,4 @@ ENV PYTHONPATH=/app
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-# Stage serve: entra no B3, junto com a API.
+# Stage serve: stage de serving da API, ainda não implementado.

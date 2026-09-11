@@ -139,6 +139,6 @@ execução de 11/09/2026, `split_hash=7e8de5fa1d2760a2`):
 
 Desbalanceamento moderado (≈2,55:1 entre "urgente" e "normal", maior que a estimativa
 inicial de 1,8:1 calculada antes da resolução multi-rótulo), tratável com
-`class_weight="balanced"` no treino (B2) — ainda não exige SMOTE nem reamostragem, mas é um
-ponto para o model card (B2) observar: o modelo verá bem mais exemplos de "urgente" que de
+`class_weight="balanced"` no treino — ainda não exige SMOTE nem reamostragem, mas é um
+ponto para o model card observar: o modelo verá bem mais exemplos de "urgente" que de
 "normal".

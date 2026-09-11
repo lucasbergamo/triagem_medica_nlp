@@ -1,6 +1,7 @@
 # Triagem Médica NLP — compose raiz.
-# Perfil default (api-sklearn, api-onnx, prometheus, grafana) entra no B3/B5.
-# Perfil airflow entra no B6, integrando airflow/docker-compose.yaml.
+# Perfil default (api-sklearn, api-onnx, prometheus, grafana): pendente, entra com a API e o
+# monitoramento.
+# Perfil airflow: pendente, integra airflow/docker-compose.yaml quando a orquestração entrar.
 # Perfil ci: os dois serviços abaixo, para lint/test em container (paridade com o CI do GitHub).
 name: triagem
 
