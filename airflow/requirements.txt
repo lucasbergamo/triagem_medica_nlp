@@ -1,0 +1,11 @@
+# Dependências das tasks da DAG — cada task chama um módulo de src/,
+# então a imagem do Airflow precisa das mesmas bibliotecas do projeto.
+scikit-learn
+pandas
+pyarrow
+skl2onnx
+onnx
+onnxruntime
+pydantic-settings
+structlog
+requests
