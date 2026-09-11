@@ -1,0 +1,86 @@
+# PDFs e documentos
+*.pdf
+*.docx
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Ambientes virtuais
+.venv/
+venv/
+env/
+ENV/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# Dados — bronze é comitado intencionalmente (CSV público, sem DVC — ARQUITETURA.md §2.3).
+# silver/gold são derivados, regenerados por `make data`.
+data/silver/*
+!data/silver/.gitkeep
+data/gold/*
+!data/gold/.gitkeep
+
+# Modelos treinados — artefatos, não código
+models/*
+!models/.gitkeep
+!models/current
+models/current/*
+!models/current/.gitkeep
+models/staging/
+
+# Métricas geradas por treino/avaliação/benchmark
+metrics/*
+!metrics/.gitkeep
+
+# Airflow — estado local, nunca commitado
+airflow/.env
+airflow/logs/
+
+# IDEs
+.vscode/
+.idea/
+*.code-workspace
+
+# Sistema operacional
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Variáveis de ambiente
+.env
+.env.local
+.env.*.local
+secrets.yaml
+# .env.example deve ser commitado — é o template público
+
+# Pre-commit
+.pre-commit-cache/
+
+# Cobertura de testes
+.coverage
+htmlcov/
+coverage.xml
+
+# Ruff / pytest
+.ruff_cache/
+.pytest_cache/
+
+# Terraform (B8) — state contém dados sensíveis e é específico da conta AWS
+# (.terraform.lock.hcl NÃO entra aqui — fixa a versão exata do provider, mesmo
+# princípio do poetry.lock)
+infra/.terraform/
+infra/*.tfstate
+infra/*.tfstate.*
+infra/*.tfvars
+infra/crash.log
+infra/tfplan
