@@ -1,4 +1,4 @@
-.PHONY: install lint format test validate data train clean
+.PHONY: install lint format test validate data train eval clean
 
 # ── Setup ──────────────────────────────────────────────────────────
 install:
@@ -27,6 +27,9 @@ data:
 # ── Modelo ────────────────────────────────────────────────────────
 train:
 	poetry run python -m src.models.train
+
+eval:
+	poetry run python -m src.models.evaluate
 
 # ── Limpeza ───────────────────────────────────────────────────────
 clean:
