@@ -1,4 +1,4 @@
-.PHONY: install lint format test validate data train eval promote clean
+.PHONY: install lint format test validate data train eval promote serve docker-serve benchmark clean
 
 # ── Setup ──────────────────────────────────────────────────────────
 install:
@@ -33,6 +33,16 @@ eval:
 
 promote:
 	poetry run python -m src.models.registry
+
+# ── Serving ───────────────────────────────────────────────────────
+serve:
+	poetry run uvicorn src.api.main:app --reload --port 8000
+
+docker-serve:
+	docker compose up --build api
+
+benchmark:
+	poetry run python scripts/benchmark_latency.py
 
 # ── Limpeza ───────────────────────────────────────────────────────
 clean:

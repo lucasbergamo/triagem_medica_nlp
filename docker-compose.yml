@@ -1,11 +1,28 @@
 # Triagem Médica NLP — compose raiz.
-# Perfil default (api-sklearn, api-onnx, prometheus, grafana): pendente, entra com a API e o
-# monitoramento.
+# Perfil default: api — serving do backend sklearn, com o modelo embutido na imagem (estágio
+# `serve` do Dockerfile). api-onnx, prometheus e grafana entram no bloco de otimização/
+# observabilidade, ao lado deste serviço.
 # Perfil airflow: pendente, integra airflow/docker-compose.yaml quando a orquestração entrar.
 # Perfil ci: os dois serviços abaixo, para lint/test em container (paridade com o CI do GitHub).
 name: triagem
 
 services:
+  api:
+    container_name: triagem-api
+    build:
+      context: .
+      target: serve
+    environment:
+      - MODEL_BACKEND=sklearn
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/ready')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
   lint:
     container_name: triagem-lint
     build:
