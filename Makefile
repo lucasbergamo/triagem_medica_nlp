@@ -1,4 +1,5 @@
-.PHONY: install lint format test validate data train eval promote serve docker-serve benchmark clean
+.PHONY: install lint format test validate data train eval export-onnx promote serve \
+	docker-serve docker-serve-onnx docker-serve-all benchmark benchmark-comparar clean
 
 # ── Setup ──────────────────────────────────────────────────────────
 install:
@@ -31,6 +32,9 @@ train:
 eval:
 	poetry run python -m src.models.evaluate
 
+export-onnx:
+	poetry run python -m src.models.export_onnx
+
 promote:
 	poetry run python -m src.models.registry
 
@@ -39,10 +43,19 @@ serve:
 	poetry run uvicorn src.api.main:app --reload --port 8000
 
 docker-serve:
-	docker compose up --build api
+	docker compose up --build api-sklearn
+
+docker-serve-onnx:
+	docker compose up --build api-onnx
+
+docker-serve-all:
+	docker compose up --build api-sklearn api-onnx
 
 benchmark:
 	poetry run python scripts/benchmark_latency.py
+
+benchmark-comparar:
+	poetry run python scripts/benchmark_latency.py --comparar
 
 # ── Limpeza ───────────────────────────────────────────────────────
 clean:

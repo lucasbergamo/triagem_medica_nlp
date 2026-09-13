@@ -1,0 +1,88 @@
+{
+  "predict_completo": {
+    "sklearn": {
+      "backend": "sklearn",
+      "n_medicoes": 1000,
+      "n_warmup": 200,
+      "p50_ms": 0.796,
+      "p95_ms": 1.1866,
+      "p99_ms": 1.6413,
+      "media_ms": 0.8373,
+      "desvio_padrao_ms": 0.2024,
+      "tamanho_artefato_kb": 3188.1,
+      "speedup_p95_vs_sklearn": 1.0
+    },
+    "onnx": {
+      "backend": "onnx",
+      "n_medicoes": 1000,
+      "n_warmup": 200,
+      "p50_ms": 0.7491,
+      "p95_ms": 1.1875,
+      "p99_ms": 1.4674,
+      "media_ms": 0.7919,
+      "desvio_padrao_ms": 0.2262,
+      "tamanho_artefato_kb": 586.2,
+      "speedup_p95_vs_sklearn": 1.0
+    },
+    "onnx-int8": {
+      "backend": "onnx-int8",
+      "n_medicoes": 1000,
+      "n_warmup": 200,
+      "p50_ms": 0.7095,
+      "p95_ms": 1.064,
+      "p99_ms": 1.5513,
+      "media_ms": 0.7492,
+      "desvio_padrao_ms": 0.1928,
+      "tamanho_artefato_kb": 147.4,
+      "speedup_p95_vs_sklearn": 1.12
+    }
+  },
+  "decomposicao": {
+    "vetorizacao_tfidf": {
+      "p50_ms": 0.5572,
+      "p95_ms": 1.0473,
+      "p99_ms": 1.6595,
+      "media_ms": 0.6239,
+      "desvio_padrao_ms": 0.2698
+    },
+    "classificador": {
+      "sklearn": {
+        "backend": "sklearn",
+        "p50_ms": 0.1287,
+        "p95_ms": 0.1694,
+        "p99_ms": 0.2836,
+        "media_ms": 0.1385,
+        "desvio_padrao_ms": 0.0637
+      },
+      "onnx": {
+        "backend": "onnx",
+        "p50_ms": 0.0801,
+        "p95_ms": 0.1162,
+        "p99_ms": 0.2004,
+        "media_ms": 0.0875,
+        "desvio_padrao_ms": 0.0226
+      },
+      "onnx-int8": {
+        "backend": "onnx-int8",
+        "p50_ms": 0.0553,
+        "p95_ms": 0.0749,
+        "p99_ms": 0.1053,
+        "media_ms": 0.0586,
+        "desvio_padrao_ms": 0.0133
+      }
+    }
+  },
+  "tamanhos": {
+    "vetorizador_tfidf_kb": 2015.3,
+    "classificador_kb": {
+      "sklearn": 1172.9,
+      "onnx": 586.2,
+      "onnx-int8": 147.4
+    },
+    "footprint_total_kb": {
+      "sklearn": 3188.1,
+      "onnx": 3774.3,
+      "onnx-int8": 3335.5
+    }
+  }
+}

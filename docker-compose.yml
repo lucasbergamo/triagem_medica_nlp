@@ -1,14 +1,22 @@
 # Triagem Médica NLP — compose raiz.
-# Perfil default: api — serving do backend sklearn, com o modelo embutido na imagem (estágio
-# `serve` do Dockerfile). api-onnx, prometheus e grafana entram no bloco de otimização/
-# observabilidade, ao lado deste serviço.
+# Perfil default: api-sklearn e api-onnx — mesma imagem (estágio `serve` do Dockerfile), só
+# `MODEL_BACKEND` muda entre as duas. Existirem lado a lado é o que permite comparar os dois
+# backends ao vivo (latência, painel do Grafana) sem rebuild. Prometheus e grafana entram no
+# bloco de observabilidade, ao lado destes dois serviços.
 # Perfil airflow: pendente, integra airflow/docker-compose.yaml quando a orquestração entrar.
 # Perfil ci: os dois serviços abaixo, para lint/test em container (paridade com o CI do GitHub).
 name: triagem
 
+x-api-healthcheck: &api-healthcheck
+  test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/ready')"]
+  interval: 10s
+  timeout: 5s
+  retries: 5
+  start_period: 10s
+
 services:
-  api:
-    container_name: triagem-api
+  api-sklearn:
+    container_name: triagem-api-sklearn
     build:
       context: .
       target: serve
@@ -16,12 +24,18 @@ services:
       - MODEL_BACKEND=sklearn
     ports:
       - "8000:8000"
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/ready')"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
+    healthcheck: *api-healthcheck
+
+  api-onnx:
+    container_name: triagem-api-onnx
+    build:
+      context: .
+      target: serve
+    environment:
+      - MODEL_BACKEND=onnx
+    ports:
+      - "8001:8000"
+    healthcheck: *api-healthcheck
 
   lint:
     container_name: triagem-lint

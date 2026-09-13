@@ -16,6 +16,10 @@ logger = get_logger(__name__)
 # existir, só há `pipeline.joblib`).
 ARTEFATOS_SERVIDOS = ["pipeline.joblib", "pipeline.onnx", "pipeline.int8.onnx"]
 
+# Metadado de treino (batch_id, data_treino, macro_f1_val) — não é um modelo servido, mas
+# `/model/info` lê `modelo_versao` dele, então precisa viajar junto.
+NOME_METADADOS = "model_meta.json"
+
 
 def promover(store: LocalModelStore | None = None) -> list[str]:
     store = store or LocalModelStore(MODELS_CURRENT_DIR)
@@ -31,6 +35,11 @@ def promover(store: LocalModelStore | None = None) -> list[str]:
         raise FileNotFoundError(
             f"Nenhum artefato encontrado em {MODELS_STAGING_DIR} — treino falhou ou não rodou."
         )
+
+    origem_metadados = MODELS_STAGING_DIR / NOME_METADADOS
+    if origem_metadados.exists():
+        store.copiar(origem_metadados, NOME_METADADOS)
+        promovidos.append(NOME_METADADOS)
 
     logger.info("modelo_promovido", artefatos=promovidos)
     return promovidos

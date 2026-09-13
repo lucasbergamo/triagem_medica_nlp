@@ -36,11 +36,16 @@ docker compose --profile ci run --rm ci
 `FastAPI`, modelo carregado uma única vez no `lifespan` — nunca por requisição.
 
 ```bash
-make train && make eval && make promote   # gera models/current/pipeline.joblib
-make serve                                 # uvicorn local, localhost:8000
+make train && make eval && make export-onnx && make promote   # gera os 3 artefatos em models/current/
+make serve                                 # uvicorn local, localhost:8000 (MODEL_BACKEND do .env)
 # ou
-make docker-serve                          # imagem com o modelo embutido (estágio `serve`)
+make docker-serve                          # api-sklearn, localhost:8000
+make docker-serve-onnx                     # api-onnx, localhost:8001 (MODEL_BACKEND=onnx)
+make docker-serve-all                      # as duas de pé ao mesmo tempo, portas diferentes
 ```
+
+O backend de inferência (`sklearn`, `onnx` ou `onnx-int8`) é escolhido por `MODEL_BACKEND`,
+lido em runtime — a mesma imagem serve os três, sem rebuild.
 
 | Método | Rota | Papel |
 |---|---|---|
@@ -75,18 +80,26 @@ ela bloquearia o event loop, enfileirando todas as requisições concorrentes. C
 FastAPI despacha a chamada para o threadpool do Starlette, liberando o event loop — é o que
 mantém a medição de latência sob carga válida.
 
-### Latência de inferência (baseline)
+### Latência de inferência — sklearn, onnx e onnx-int8
 
 Medição pura de `predictor.predict()` — sem HTTP nem serialização — via
-`scripts/benchmark_latency.py`: 200 iterações de aquecimento descartadas, 1.000 medições com
-`time.perf_counter_ns`, amostras reais do conjunto de test.
+`scripts/benchmark_latency.py --comparar`: 200 iterações de aquecimento descartadas, 1.000
+medições com `time.perf_counter_ns`, amostras reais do conjunto de test.
 
-| Backend | p50 (ms) | p95 (ms) | p99 (ms) | Média (ms) | Desvio (ms) | Artefato (KB) |
-|---|---|---|---|---|---|---|
-| sklearn | 0,7944 | 1,2701 | 1,8117 | 0,8414 | 0,2366 | 3188,1 |
+| Backend | p50 (ms) | p95 (ms) | p99 (ms) | Speedup p95 |
+|---|---|---|---|---|
+| sklearn | 0,796 | 1,187 | 1,641 | 1,00x |
+| onnx | 0,749 | 1,188 | 1,467 | 1,00x |
+| onnx-int8 | 0,710 | 1,064 | 1,551 | 1,12x |
 
-Só o backend `sklearn` existe até aqui — é a baseline contra a qual o ganho do ONNX (bloco de
-otimização) vai ser medido, no mesmo script.
+Ganho fim a fim modesto (12% em p95) porque o TF-IDF — Python puro nos três backends, por uma
+limitação real do tokenizador do `skl2onnx`, não por falta de esforço — domina o tempo
+(~70-78% do total, medido). Isolado, o classificador acelera de verdade (onnx-int8 é **2,33x**
+mais rápido que o sklearn, e **8x menor**: 1.172,9 KB → 147,4 KB), mas nunca foi mais que ~16%
+do tempo total, e o footprint total em disco dos backends onnx **não** encolhe — eles ainda
+dependem do `pipeline.joblib` inteiro para o TF-IDF, então ficam 5-18% *maiores* que o
+sklearn, não menores. A decomposição completa (vetorização x classificação, componente por
+componente) está em [`docs/latencia.md`](docs/latencia.md).
 
 ## Decisão de nuvem — real-time, não batch nem serverless
 
