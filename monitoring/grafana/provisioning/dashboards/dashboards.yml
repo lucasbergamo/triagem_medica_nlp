@@ -1,0 +1,14 @@
+# Auto-carrega o JSON de monitoring/grafana/dashboards/ — o dashboard aparece populado assim
+# que o Grafana sobe, sem importação manual pela UI.
+apiVersion: 1
+
+providers:
+  - name: triagem
+    orgId: 1
+    folder: ""
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards

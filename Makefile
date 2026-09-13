@@ -1,5 +1,6 @@
 .PHONY: install lint format test validate data train eval export-onnx promote serve \
-	docker-serve docker-serve-onnx docker-serve-all benchmark benchmark-comparar clean
+	docker-serve docker-serve-onnx docker-serve-all benchmark benchmark-comparar \
+	monitoring-up monitoring-down load-test clean
 
 # ── Setup ──────────────────────────────────────────────────────────
 install:
@@ -56,6 +57,17 @@ benchmark:
 
 benchmark-comparar:
 	poetry run python scripts/benchmark_latency.py --comparar
+
+# ── Observabilidade ───────────────────────────────────────────────
+monitoring-up:
+	docker compose up -d --build
+
+monitoring-down:
+	docker compose down
+
+load-test:
+	poetry run python scripts/load_test.py --rps 10 --duracao 60 --backend sklearn
+	poetry run python scripts/load_test.py --rps 10 --duracao 60 --backend onnx
 
 # ── Limpeza ───────────────────────────────────────────────────────
 clean:

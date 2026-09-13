@@ -1,0 +1,38 @@
+# alerts.yml — 3 regras, limiares alinhados ao que o projeto já declara em outro lugar:
+# o SLO de p95 < 100 ms fim a fim (ver decisão de nuvem no README) e o limite de taxa de erro
+# de 5% do material de referência da disciplina de monitoramento.
+groups:
+  - name: triagem_alerts
+    rules:
+      - alert: LatenciaP95Alta
+        expr: histogram_quantile(0.95, rate(ml_prediction_latency_seconds_bucket[1m])) > 0.1
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "p95 de latência acima do SLO (100 ms) em {{ $labels.endpoint }}"
+          description: >-
+            p95 de ml_prediction_latency_seconds está acima de 100 ms nos últimos minutos —
+            o SLO fim a fim declarado na decisão de nuvem (README) não está sendo cumprido.
+
+      - alert: TaxaDeErroAlta
+        expr: |
+          sum(rate(ml_requests_total{status_code=~"5.."}[5m]))
+          / sum(rate(ml_requests_total[5m])) > 0.05
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Taxa de erro 5xx acima de 5%"
+          description: >-
+            Mais de 5% das requisições dos últimos 5 minutos terminaram em erro de servidor —
+            mesmo limiar da ErrorRateRule de referência da aula 04.03.
+
+      - alert: AlvoForaDoAr
+        expr: up{job=~"api-sklearn|api-onnx"} == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Alvo {{ $labels.job }} fora do ar"
+          description: "O Prometheus não consegue coletar /metrics de {{ $labels.instance }}."

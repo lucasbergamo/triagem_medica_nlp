@@ -1,0 +1,27 @@
+# prometheus.yml — scrape das duas APIs (mesma imagem, MODEL_BACKEND diferente) para o
+# painel comparativo sklearn x onnx. scrape_interval de 5s (não os 15s default) porque a
+# demonstração dura minutos, não horas — 15s deixaria o painel visivelmente atrasado.
+#
+# Sem label `backend` fixa por job: a métrica `ml_inference_duration_seconds` já carrega o
+# backend real, lido do predictor em runtime — uma label externa com o mesmo nome colidiria e
+# o Prometheus renomearia a da métrica para `exported_backend`, escondendo o valor de verdade
+# sempre que o container servir um backend diferente do que o nome do job sugere.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - "alerts.yml"
+
+scrape_configs:
+  - job_name: "api-sklearn"
+    scrape_interval: 5s
+    metrics_path: "/metrics"
+    static_configs:
+      - targets: ["api-sklearn:8000"]
+
+  - job_name: "api-onnx"
+    scrape_interval: 5s
+    metrics_path: "/metrics"
+    static_configs:
+      - targets: ["api-onnx:8000"]
