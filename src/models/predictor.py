@@ -18,7 +18,7 @@ from typing import Protocol
 
 import numpy as np
 from joblib import load
-from onnxruntime import InferenceSession
+from onnxruntime import InferenceSession, SessionOptions
 
 from src.utils.config import MODELS_CURRENT_DIR, settings
 from src.utils.logger import get_logger
@@ -155,7 +155,19 @@ class OnnxPredictor:
         pipeline = load(artefato_pipeline)
         self._tfidf = pipeline.named_steps["tfidf"]
         self.classes: list[str] = list(pipeline.classes_)
-        self._sessao = InferenceSession(str(artefato_onnx), providers=["CPUExecutionProvider"])
+
+        # O grafo do classificador tem 2 nós — não há trabalho para paralelizar dentro de uma
+        # única inferência. O default do ONNX Runtime (`*_num_threads=0`) significa "use todos
+        # os núcleos", e sob concorrência real (várias requisições ao mesmo tempo, cada uma
+        # tentando usar a máquina inteira) essas threads brigam entre si por CPU — medido: em
+        # carga com 8 requisições concorrentes, o default deu p95 pior que fixar 1 thread por
+        # sessão (ver "sob carga" em docs/latencia.md). Threads fixas evitam a oversubscrição.
+        opcoes = SessionOptions()
+        opcoes.intra_op_num_threads = 1
+        opcoes.inter_op_num_threads = 1
+        self._sessao = InferenceSession(
+            str(artefato_onnx), opcoes, providers=["CPUExecutionProvider"]
+        )
         self._entrada = self._sessao.get_inputs()[0].name
         self.modelo_versao = _versao_do_modelo(artefato_onnx.parent, artefato_onnx)
 
