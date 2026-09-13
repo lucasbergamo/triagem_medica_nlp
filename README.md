@@ -119,3 +119,36 @@ o padrão serverless tem por natureza. O alvo de implantação segue o mesmo rac
 serviço containerizado sempre ativo (ECS Fargate), atrás de um balanceador que só recebe
 tráfego depois que `/ready` confirma o modelo carregado — nunca uma função efêmera por
 requisição.
+
+## Observabilidade
+
+```bash
+make monitoring-up      # api-sklearn, api-onnx, prometheus e grafana, do zero
+make load-test          # popula os painéis com tráfego real contra os dois backends
+```
+
+- Grafana: `localhost:3000` (`admin`/`admin`) — dashboard já carregado por provisionamento,
+  sem importar JSON pela UI.
+- Prometheus: `localhost:9090` — alvos `api-sklearn` e `api-onnx`, scrape a cada 5s.
+
+`GET /metrics` expõe 8 séries Prometheus: as 4 primeiras (`ml_predictions_total`,
+`ml_prediction_latency_seconds`, `ml_prediction_confidence`, `ml_active_requests`) usam o
+mesmo nome e labels do material de referência da disciplina de monitoramento; as outras 4
+(`ml_inference_duration_seconds`, `ml_requests_total`, `ml_errors_total`, `ml_model_info`) são
+extensão deste projeto. Os buckets de latência (`0.00005` a `1.0` segundo) foram recalibrados
+pela baseline medida (`metrics/latency_baseline.json`, p50 0,79 ms) — o default da biblioteca
+começaria em 5 ms e esconderia a curva inteira num único bucket.
+
+O dashboard tem 6 painéis: taxa de requisições, latência HTTP (p50/p95/p99), taxa de erro,
+distribuição de urgências preditas, confiança média das predições e — o que diferencia esta
+entrega — **latência de inferência por backend, sklearn e onnx no mesmo gráfico**:
+
+![Dashboard Grafana — sklearn vs onnx, taxa de erro e distribuição de urgências](docs/img/dashboard_grafana.png)
+
+Três alertas em `monitoring/prometheus/alerts.yml`: p95 acima do SLO de 100 ms (§ decisão de
+nuvem acima), taxa de erro 5xx acima de 5%, e alvo fora do ar.
+
+Sob carga real (concorrência de requisições HTTP, não a medição in-process da seção de
+latência acima), o painel 4 mostra o sklearn ganhando dos dois backends onnx — o inverso do
+benchmark in-process. As duas medições estão corretas; medem coisas diferentes, e a seção
+"sob carga" de [`docs/latencia.md`](docs/latencia.md) explica o porquê com números.
