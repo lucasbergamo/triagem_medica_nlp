@@ -1,5 +1,7 @@
 """Testes de src/models — treino, gate de avaliação e promoção. Dados sintéticos, sem rede."""
 
+import json
+
 import joblib
 import pandas as pd
 import pytest
@@ -69,6 +71,19 @@ def test_run_treino_com_baseline_salva_os_dois_artefatos(tmp_path, monkeypatch):
     assert (tmp_path / "pipeline.joblib").exists()
     assert (tmp_path / "pipeline_rf_baseline.joblib").exists()
     assert resultado["baseline"]["modelo"] == "random_forest_tfidf"
+
+
+def test_run_treino_grava_model_meta_com_batch_id_e_data_treino(tmp_path, monkeypatch):
+    df = _dataset_sintetico()
+    monkeypatch.setattr(train_mod, "MODELS_STAGING_DIR", tmp_path)
+    monkeypatch.setattr(train_mod, "load_gold", lambda: (df, df.iloc[:0], df.iloc[:0], {}))
+
+    resultado = train_mod.run(batch_id="teste123")
+
+    meta = json.loads((tmp_path / "model_meta.json").read_text(encoding="utf-8"))
+    assert meta["batch_id"] == "teste123"
+    assert meta["data_treino"] == resultado["data_treino"]
+    assert "macro_f1_val" not in meta  # só a avaliação grava isso, depois
 
 
 def test_run_treino_gera_batch_id_quando_nao_informado(tmp_path, monkeypatch):
@@ -159,6 +174,51 @@ def test_validar_usa_o_piso_das_settings_quando_nao_informado(monkeypatch):
         evaluate_mod.validar({"val": {"macro_f1": 0.60}, "test": {"macro_f1": 0.60}})
 
 
+def test_run_avaliacao_enriquece_model_meta_com_macro_f1_do_val(tmp_path, monkeypatch):
+    df = _dataset_sintetico()
+    pipeline = build_pipeline(seed=42)
+    pipeline.fit(df["texto"], df["urgencia"])
+
+    staging = tmp_path / "staging"
+    staging.mkdir()
+    joblib.dump(pipeline, staging / "pipeline.joblib")
+    (staging / "model_meta.json").write_text(
+        json.dumps({"batch_id": "teste123", "data_treino": "2026-01-01T00:00:00+00:00"}),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(evaluate_mod, "MODELS_STAGING_DIR", staging)
+    monkeypatch.setattr(evaluate_mod, "METRICS_DIR", tmp_path / "metrics")
+    monkeypatch.setattr(evaluate_mod, "load_gold", lambda: (df.iloc[:0], df, df, {}))
+
+    metrics = evaluate_mod.run()
+
+    meta = json.loads((staging / "model_meta.json").read_text(encoding="utf-8"))
+    assert meta["batch_id"] == "teste123"  # preservado, não sobrescrito
+    assert meta["macro_f1_val"] == metrics["val"]["macro_f1"]
+
+
+def test_run_avaliacao_sem_model_meta_nao_falha_so_loga(tmp_path, monkeypatch):
+    """`make eval` sem `make train` antes (staging sem model_meta.json) não pode derrubar a
+    avaliação — só o gate de macro-F1 decide se o modelo é aprovado."""
+    df = _dataset_sintetico()
+    pipeline = build_pipeline(seed=42)
+    pipeline.fit(df["texto"], df["urgencia"])
+
+    staging = tmp_path / "staging"
+    staging.mkdir()
+    joblib.dump(pipeline, staging / "pipeline.joblib")
+
+    monkeypatch.setattr(evaluate_mod, "MODELS_STAGING_DIR", staging)
+    monkeypatch.setattr(evaluate_mod, "METRICS_DIR", tmp_path / "metrics")
+    monkeypatch.setattr(evaluate_mod, "load_gold", lambda: (df.iloc[:0], df, df, {}))
+
+    metrics = evaluate_mod.run()  # não levanta
+
+    assert not (staging / "model_meta.json").exists()
+    assert "val" in metrics
+
+
 # ── registry.py ───────────────────────────────────────────────────────
 
 
@@ -175,6 +235,21 @@ def test_promover_copia_apenas_os_artefatos_que_existem_em_staging(tmp_path, mon
     assert promovidos == ["pipeline.joblib"]
     assert (current / "pipeline.joblib").exists()
     assert not (current / "pipeline.onnx").exists()
+
+
+def test_promover_copia_model_meta_junto_quando_presente(tmp_path, monkeypatch):
+    staging = tmp_path / "staging"
+    current = tmp_path / "current"
+    staging.mkdir()
+    (staging / "pipeline.joblib").write_bytes(b"fake-model")
+    (staging / "model_meta.json").write_text('{"batch_id": "x"}', encoding="utf-8")
+    monkeypatch.setattr(registry_mod, "MODELS_STAGING_DIR", staging)
+    monkeypatch.setattr(registry_mod, "MODELS_CURRENT_DIR", current)
+
+    promovidos = registry_mod.promover(LocalModelStore(current))
+
+    assert promovidos == ["pipeline.joblib", "model_meta.json"]
+    assert (current / "model_meta.json").exists()
 
 
 def test_promover_falha_quando_staging_nao_tem_nenhum_artefato(tmp_path, monkeypatch):

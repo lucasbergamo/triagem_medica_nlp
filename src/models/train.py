@@ -8,9 +8,10 @@ docs/model_card.md). O RandomForest treina de qualquer forma, como baseline de c
 """
 
 import argparse
+import json
 import shutil
 import time
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 import joblib
@@ -28,6 +29,7 @@ logger = get_logger(__name__)
 
 NOME_ARTEFATO_PRINCIPAL = "pipeline.joblib"
 NOME_ARTEFATO_BASELINE = "pipeline_rf_baseline.joblib"
+NOME_METADADOS = "model_meta.json"
 
 
 def _tfidf() -> TfidfVectorizer:
@@ -82,6 +84,20 @@ def _salvar_staging(pipeline: Pipeline, nome_arquivo: str) -> Path:
     return path
 
 
+def _salvar_metadados(batch_id: str, data_treino: str) -> Path:
+    """`model_meta.json` — batch_id e data_treino, gravados aqui; `macro_f1_val` entra depois,
+    enriquecido por `src.models.evaluate.run()` (a avaliação roda depois do treino, e é onde
+    o macro-F1 do val existe). `/model/info` lê `data_treino` daqui, nunca do mtime do
+    artefato — o arquivo é copiado junto na promoção."""
+    MODELS_STAGING_DIR.mkdir(parents=True, exist_ok=True)
+    path = MODELS_STAGING_DIR / NOME_METADADOS
+    path.write_text(
+        json.dumps({"batch_id": batch_id, "data_treino": data_treino}, indent=2),
+        encoding="utf-8",
+    )
+    return path
+
+
 def _limpar_staging() -> None:
     """Esvazia `models/staging/` no início de cada run — cada batch começa limpo.
 
@@ -106,6 +122,7 @@ def run(batch_id: str | None = None, baseline: bool = False) -> dict:
     set_global_seed()
     seed = settings.seed
     batch_id = batch_id or datetime.now().strftime("%Y%m%d_%H%M%S")
+    data_treino = datetime.now(UTC).isoformat()
 
     _limpar_staging()
 
@@ -115,10 +132,12 @@ def run(batch_id: str | None = None, baseline: bool = False) -> dict:
     pipeline = build_pipeline(seed)
     tempo_treino = _treinar(pipeline, x_train, y_train)
     path = _salvar_staging(pipeline, NOME_ARTEFATO_PRINCIPAL)
+    _salvar_metadados(batch_id, data_treino)
 
     resultado = {
         "batch_id": batch_id,
         "modelo": "logreg_tfidf",
+        "data_treino": data_treino,
         "tempo_treino_s": round(tempo_treino, 2),
         "tamanho_artefato_kb": round(path.stat().st_size / 1024, 1),
         "n_train": len(x_train),

@@ -109,9 +109,9 @@ def model_info() -> ModelInfoResponse:
     return ModelInfoResponse(
         backend=predictor.backend,
         modelo_versao=predictor.modelo_versao,
-        # mesmo valor de modelo_versao: é o mtime do artefato preservado por shutil.copy2 na
-        # promoção, então já É o horário real do treino — não existe (ainda) um registro de
-        # metadados de treino separado do próprio arquivo do modelo.
+        # mesmo valor: `predictor.modelo_versao` já é o `data_treino` lido de
+        # `models/current/model_meta.json` (gravado pelo treino, copiado pela promoção) —
+        # ver `src/models/predictor.py::_versao_do_modelo`.
         data_treino=predictor.modelo_versao,
         classes=predictor.classes,
     )

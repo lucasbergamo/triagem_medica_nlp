@@ -27,6 +27,7 @@ logger = get_logger(__name__)
 
 NOME_ARTEFATO_PRINCIPAL = "pipeline.joblib"
 NOME_METRICAS = "eval_metrics.json"
+NOME_METADADOS = "model_meta.json"
 
 
 def _carregar_staging(nome_arquivo: str = NOME_ARTEFATO_PRINCIPAL):
@@ -60,6 +61,22 @@ def _salvar_metrics(metrics: dict) -> None:
     path = METRICS_DIR / NOME_METRICAS
     path.write_text(json.dumps(metrics, indent=2, ensure_ascii=False), encoding="utf-8")
     logger.info("metrics_salvas", path=str(path))
+
+
+def _atualizar_metadados_com_macro_f1(macro_f1_val: float) -> None:
+    """Enriquece `model_meta.json` (batch_id/data_treino gravados pelo treino) com o
+    macro-F1 do val — só existe neste ponto porque a avaliação roda depois do treino.
+
+    Sem o arquivo (ex.: `make eval` chamado sem `make train` antes de um staging vazio), loga
+    e segue: não é papel da avaliação recriar metadado de treino que não existe.
+    """
+    path = MODELS_STAGING_DIR / NOME_METADADOS
+    if not path.exists():
+        logger.warning("model_meta_ausente_na_avaliacao", path=str(path))
+        return
+    meta = json.loads(path.read_text(encoding="utf-8"))
+    meta["macro_f1_val"] = macro_f1_val
+    path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
 
 
 def validar(metrics: dict, piso: float | None = None) -> dict:
@@ -107,6 +124,7 @@ def run() -> dict:
         "test": avaliar(pipeline, test["texto"], test["urgencia"]),
     }
     _salvar_metrics(metrics)
+    _atualizar_metadados_com_macro_f1(metrics["val"]["macro_f1"])
     return metrics
 
 
