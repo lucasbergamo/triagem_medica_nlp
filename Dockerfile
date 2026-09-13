@@ -68,12 +68,15 @@ ENV PYTHONPATH=/app
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-# Stage serve: runtime + modelo treinado embutido — a imagem que sobe sozinha em produção,
+# Stage serve: runtime + modelos treinados embutidos — a imagem que sobe sozinha em produção,
 # sem depender de volume externo (ECS Fargate não tem disco persistente por padrão). Exige
-# `make train && make eval && make promote` antes do build, para `models/current/` existir.
+# `make train && make eval && make export-onnx && make promote` antes do build, para
+# `models/current/` existir. Copia o diretório inteiro (não um artefato por vez): a mesma
+# imagem serve os backends sklearn, onnx e onnx-int8, escolhidos em runtime por
+# `MODEL_BACKEND` — não há rebuild por backend, só troca de variável de ambiente.
 FROM runtime AS serve
 
-COPY models/current/pipeline.joblib ./models/current/pipeline.joblib
+COPY models/current/ ./models/current/
 
 EXPOSE 8000
 CMD ["uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
