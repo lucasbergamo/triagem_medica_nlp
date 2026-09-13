@@ -200,3 +200,87 @@ Consequência prática: os 3 backends concordam na esmagadora maioria das predi�
 sejam bit-a-bit idênticos para o backend quantizado. `tests/test_predictor.py` cobre os 3
 backends concordando na mesma entrada usando um pipeline sintético pequeno, onde as margens de
 decisão são largas o bastante para não haver divergência nenhuma nos casos testados.
+
+## Sob carga — o que muda quando a medição deixa de ser in-process
+
+Tudo acima mede `predictor.predict()` isolado, sequencial, sem concorrência — é o que prova
+que o classificador onnx é mais rápido *por chamada*. Isso não é a mesma pergunta que o painel
+"latência de inferência por backend" do dashboard (`ml_inference_duration_seconds`) responde:
+esse painel mede a mesma chamada, mas atrás de `GET /predict`, com múltiplas requisições HTTP
+concorrentes reais — o cenário de produção, não o de benchmark. `scripts/load_test.py` gera
+essa carga; o número reportado aqui é o p95 de `ml_inference_duration_seconds` no Prometheus
+durante a carga, não o `p95_ms` do próprio `load_test.py` (que inclui HTTP e serialização).
+
+### Achado 1 — o default do ONNX Runtime oversubscreve CPU sob concorrência
+
+`InferenceSession` sem `SessionOptions` usa `intra_op_num_threads=0` ("todos os núcleos"). O
+grafo do classificador (`Gemm` + `Softmax`, 2 nós) não tem trabalho para paralelizar dentro de
+uma única chamada — não há nada para várias threads dividirem. Sob concorrência real (várias
+requisições simultâneas, cada uma tentando usar a máquina inteira), essas threads brigam entre
+si por CPU em vez de ajudar. Medido in-process, 8 threads concorrentes, mesmo modelo:
+
+| Configuração | p50 (ms) | p95 (ms) |
+|---|---|---|
+| Default (`intra_op=0`, todos os núcleos) | 0,450 | 1,246 |
+| `intra_op=1` / `inter_op=1` | 0,383 | 0,968 |
+
+22% de melhora no p95 só fixando o paralelismo interno em 1 — aplicado em
+`OnnxPredictor.__init__` (`src/models/predictor.py`), com o mesmo raciocínio comentado no
+código: um grafo de 2 nós não ganha nada de paralelismo interno, e sob concorrência o default
+oversubscreve.
+
+### Achado 2 — mesmo com o fix, sklearn continua ganhando sob HTTP concorrente
+
+Depois do fix acima, medi os 3 backends contra `/predict` com `scripts/load_test.py --rps 20
+--duracao 25`, **um backend por vez** (a outra API parada, para isolar contenção entre
+containers de contenção real dentro do próprio backend) — repetido 3 vezes cada, mesma
+máquina, mesmo horário:
+
+| Backend | p95 `ml_inference_duration_seconds` (3 execuções) |
+|---|---|
+| sklearn | 4,96 ms · 5,80 ms · 8,90 ms |
+| onnx (fp32) | 8,69 ms · 9,23 ms · 9,76 ms |
+| onnx-int8 | 9,07 ms · 9,38 ms |
+
+Em **todas** as execuções, nas duas variantes onnx, o p95 ficou pior que o sklearn — a ordem
+nunca inverteu, embora a magnitude do gap varie bastante entre execuções (de perto de empate a
+quase 2x). Essa variação de execução para execução é o próprio sinal de que a máquina não é
+isolada: as duas APIs (e o restante do ambiente) dividem os mesmos núcleos, sem
+`deploy.resources.limits` no compose — a comparação é indicativa, não um SLA.
+
+**A hipótese de que o int8 venceria por ter 1/4 do tráfego de memória (147 KB vs. 586 KB de
+pesos) não se confirmou**: int8 ficou estatisticamente empatado com fp32 (9,07–9,38 ms contra
+8,69–9,76 ms), não melhor. Duas explicações descartadas por medição antes de chegar a essa
+conclusão:
+
+- **Não é o `.toarray()`** (a densificação do vetor esparso do TF-IDF que só o caminho onnx
+  faz). Medido isolado, 8 threads: 0,018 ms sozinho, 0,694 ms sob concorrência — praticamente
+  igual à alternativa `np.zeros` + atribuição por índice (0,626 ms nas mesmas condições).
+- **Não é GIL não liberado pelo `InferenceSession.run()`.** Comparando o mesmo padrão de
+  1 vs. 8 threads para `run()` (onnx) e `predict_proba()` (sklearn) isoladamente, nenhum dos
+  dois escala com o número de threads (ambos ficam perto de 1x, não perto do 8x ideal) — o
+  gargalo de concorrência já existe nos dois backends, então não explica por que só o onnx
+  perde para o sklearn.
+
+A explicação mais provável, não totalmente confirmada, é o próprio ponto que a seção anterior
+já registrava: o `Gemm` do onnx opera sobre um vetor **denso** de 50.000 posições, lendo a
+matriz de pesos inteira a cada chamada; a `LogisticRegression` do sklearn opera sobre a matriz
+**esparsa** que o TF-IDF já produz, tocando só as dezenas de posições não-nulas. Sequencial,
+isso não aparece (ver "achado que não bate com a hipótese inicial" acima — lá o onnx ganha).
+Sob concorrência, com várias chamadas competindo por banda de memória e cache ao mesmo tempo,
+o custo de ler uma matriz inteira por chamada pesa mais — e a quantização não muda o padrão de
+acesso (ainda lê o tensor inteiro, só que menor), o que é consistente com o empate int8 vs.
+fp32 em vez de uma vitória proporcional à redução de tamanho.
+
+### Conclusão honesta
+
+O ganho de latência do onnx documentado nas seções anteriores é real, mas é uma medição
+**in-process, sequencial** — não sobrevive, nesta implementação, à passagem para HTTP
+concorrente: sob carga real, o sklearn é consistentemente mais rápido em p95 que as duas
+variantes onnx, com ou sem quantização. O fix de `intra_op`/`inter_op` é uma melhora real e
+medida (22% de p95 in-process), mas resolve oversubscrição de threads, não a diferença
+estrutural esparso-vs-denso que domina sob concorrência. Isso não muda a decisão de manter os
+dois backends lado a lado (o objetivo do projeto é demonstrar o *strategy pattern* e a
+comparação, não vencer a todo custo) — muda a leitura do painel comparativo do dashboard: ele
+mostra a inversão em relação ao benchmark in-process, e essa inversão é o dado, não um erro de
+medição.

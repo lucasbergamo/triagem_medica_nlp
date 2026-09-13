@@ -1,0 +1,11 @@
+# Datasource já apontado para o Prometheus do compose — quem clona o repo não clica em nada.
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false

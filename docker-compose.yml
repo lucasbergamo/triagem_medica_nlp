@@ -1,8 +1,9 @@
 # Triagem Médica NLP — compose raiz.
-# Perfil default: api-sklearn e api-onnx — mesma imagem (estágio `serve` do Dockerfile), só
-# `MODEL_BACKEND` muda entre as duas. Existirem lado a lado é o que permite comparar os dois
-# backends ao vivo (latência, painel do Grafana) sem rebuild. Prometheus e grafana entram no
-# bloco de observabilidade, ao lado destes dois serviços.
+# Perfil default: api-sklearn, api-onnx, prometheus e grafana. As duas APIs são a mesma imagem
+# (estágio `serve` do Dockerfile), só `MODEL_BACKEND` muda entre as duas — existirem lado a
+# lado é o que permite comparar os dois backends ao vivo (latência, painel do Grafana) sem
+# rebuild. Prometheus faz scrape de `/metrics` nas duas a cada 5s; Grafana sobe com datasource
+# e dashboard já provisionados — nada de importar JSON pela UI.
 # Perfil airflow: pendente, integra airflow/docker-compose.yaml quando a orquestração entrar.
 # Perfil ci: os dois serviços abaixo, para lint/test em container (paridade com o CI do GitHub).
 name: triagem
@@ -37,6 +38,37 @@ services:
       - "8001:8000"
     healthcheck: *api-healthcheck
 
+  prometheus:
+    container_name: triagem-prometheus
+    image: prom/prometheus:v2.53.0
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+    ports:
+      - "9090:9090"
+    depends_on:
+      - api-sklearn
+      - api-onnx
+
+  grafana:
+    container_name: triagem-grafana
+    image: grafana/grafana:10.4.2
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+
   lint:
     container_name: triagem-lint
     build:
@@ -58,3 +90,7 @@ services:
       - ./metrics:/app/metrics
     profiles:
       - ci
+
+volumes:
+  prometheus_data:
+  grafana_data:
