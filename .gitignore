@@ -39,11 +39,13 @@ models/current/*
 !models/current/.gitkeep
 models/staging/
 
-# Métricas geradas por treino/avaliação/benchmark — exceto a baseline de latência, que é a
-# referência versionada contra a qual as medições dos backends ONNX vão comparar.
+# Métricas geradas por treino/avaliação/benchmark — exceto a baseline de latência (referência
+# versionada contra a qual as medições dos backends ONNX comparam) e o benchmark comparativo
+# dos 3 backends, que é a evidência por trás da tabela de docs/latencia.md e do README.
 metrics/*
 !metrics/.gitkeep
 !metrics/latency_baseline.json
+!metrics/latency_benchmark.json
 
 # Airflow — estado local, nunca commitado
 airflow/.env
