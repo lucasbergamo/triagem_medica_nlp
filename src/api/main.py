@@ -12,10 +12,18 @@ com os dois endpoints que importam.
 from contextlib import asynccontextmanager
 from dataclasses import asdict
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from src.api.metrics import (
+    ML_INFERENCE_DURATION_SECONDS,
+    ML_PREDICTION_CONFIDENCE,
+    ML_PREDICTIONS_TOTAL,
+    gerar_exposicao,
+    registrar_model_info,
+)
+from src.api.middleware import track_request_metrics
 from src.api.schemas import (
     HealthResponse,
     ModelInfoResponse,
@@ -25,7 +33,7 @@ from src.api.schemas import (
     PredictResponse,
     ReadyResponse,
 )
-from src.models.predictor import Predictor, get_predictor
+from src.models.predictor import Predicao, Predictor, get_predictor
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -39,8 +47,14 @@ async def lifespan(app: FastAPI):
     derruba o processo: fica registrada em `_state` para o `/ready` reportar 503 sem tirar o
     `/health` do ar — é o que permite o ECS reciclar a task em vez de achar o container morto."""
     try:
-        _state["predictor"] = get_predictor()
-        logger.info("modelo_carregado", backend=_state["predictor"].backend)
+        predictor = get_predictor()
+        _state["predictor"] = predictor
+        logger.info("modelo_carregado", backend=predictor.backend)
+        registrar_model_info(
+            backend=predictor.backend,
+            versao=predictor.modelo_versao,
+            n_classes=len(predictor.classes),
+        )
     except Exception as exc:  # qualquer falha aqui vira "não pronto", não derruba o processo
         _state["predictor"] = None
         logger.error("falha_ao_carregar_modelo", erro=str(exc))
@@ -54,6 +68,7 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+app.middleware("http")(track_request_metrics)
 
 
 def _traduzir_erro_validacao(erro: dict) -> str:
@@ -117,14 +132,30 @@ def model_info() -> ModelInfoResponse:
     )
 
 
+def _registrar_predicoes(endpoint: str, predicoes: list[Predicao]) -> None:
+    """Métricas de **modelo**, uma observação por predição do lote — diferente da métrica de
+    **requisição** do middleware, que registra uma vez por chamada HTTP mesmo quando o lote
+    tem 100 laudos."""
+    for predicao in predicoes:
+        ML_PREDICTIONS_TOTAL.labels(
+            endpoint=endpoint, predicted_class=predicao.urgencia, status="sucesso"
+        ).inc()
+        ML_PREDICTION_CONFIDENCE.observe(predicao.confianca)
+        ML_INFERENCE_DURATION_SECONDS.labels(backend=predicao.backend).observe(
+            predicao.latencia_inferencia_ms / 1000
+        )
+
+
 @app.post("/predict", response_model=PredictResponse)
 def predict(request: PredictRequest) -> PredictResponse:
     predictor = _predictor_pronto()
     try:
         (predicao,) = predictor.predict([request.texto])
     except Exception as exc:
+        ML_PREDICTIONS_TOTAL.labels(endpoint="/predict", predicted_class="n/a", status="erro").inc()
         logger.error("falha_inferencia", erro=str(exc))
         raise HTTPException(status_code=503, detail="Falha ao gerar predição.") from exc
+    _registrar_predicoes("/predict", [predicao])
     return PredictResponse(**asdict(predicao))
 
 
@@ -135,6 +166,17 @@ def predict_batch(request: PredictBatchRequest) -> PredictBatchResponse:
     try:
         predicoes = predictor.predict(textos)
     except Exception as exc:
+        ML_PREDICTIONS_TOTAL.labels(
+            endpoint="/predict/batch", predicted_class="n/a", status="erro"
+        ).inc()
         logger.error("falha_inferencia_batch", erro=str(exc), n_laudos=len(textos))
         raise HTTPException(status_code=503, detail="Falha ao gerar predições do lote.") from exc
+    _registrar_predicoes("/predict/batch", predicoes)
     return PredictBatchResponse(resultados=[PredictResponse(**asdict(p)) for p in predicoes])
+
+
+@app.get("/metrics")
+def metrics() -> Response:
+    """Exposição Prometheus (OpenMetrics) — scrape sem adaptador, local hoje e AMP depois."""
+    corpo, content_type = gerar_exposicao()
+    return Response(content=corpo, media_type=content_type)
