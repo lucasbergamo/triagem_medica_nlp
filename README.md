@@ -186,26 +186,21 @@ git clone https://github.com/lucasbergamo/triagem_medica_nlp.git
 cd triagem_medica_nlp
 ```
 
-Os dois caminhos abaixo geram o mesmo resultado — API de pé em `localhost:8000`, servindo o
-classificador de urgência. Escolha um, ou rode os dois.
+O percurso completo tem 4 etapas. A Etapa 1 tem dois caminhos — Docker (recomendado, nada de
+Python no host) ou Poetry — e a partir da Etapa 2 os comandos são os mesmos para os dois, porque
+API, observabilidade e Airflow já rodam em container em qualquer um dos caminhos.
 
-### 🐳 Caminho 1 — Docker (recomendado)
+### Etapa 1 — Gerar o modelo
 
 <details open>
-<summary><strong>Passo a passo completo</strong></summary>
+<summary><strong>Caminho 1 — Docker (recomendado)</strong></summary>
 
 ```bash
 cp .env.example .env
 
-# 1. Gera os artefatos do modelo (dados → treino → avaliação → export ONNX → promoção),
-#    rodando cada estágio em container — não precisa de Python nem Poetry no host.
+# Gera os artefatos do modelo (dados → treino → avaliação → export ONNX → promoção),
+# rodando cada estágio em container — não precisa de Python nem Poetry no host.
 make docker-pipeline
-
-# 2. Sobe as duas APIs (backends diferentes, mesma imagem) + Prometheus + Grafana
-docker compose up -d --build
-
-curl http://localhost:8000/ready   # api-sklearn
-curl http://localhost:8001/ready   # api-onnx
 ```
 
 > **Nota — Por que gerar o modelo antes do `docker compose up`**: o estágio `serve` do
@@ -213,40 +208,96 @@ curl http://localhost:8001/ready   # api-onnx
 > não tem disco persistente) — sem esse diretório preenchido, o build de `api-sklearn`/`api-onnx`
 > falha. O job `build` do CI segue exatamente esse mesmo roteiro (`.github/workflows/ci.yml`).
 
-Lint e testes, na mesma paridade do CI:
-
-```bash
-make docker-lint
-make docker-test
-```
-
 </details>
 
-### 🐍 Caminho 2 — Poetry
-
 <details open>
-<summary><strong>Passo a passo completo</strong></summary>
+<summary><strong>Caminho 2 — Poetry</strong></summary>
 
 ```bash
 make install
 cp .env.example .env
 make validate       # sanity check: Python, pacotes-chave, diretórios, .env
 
-make lint
 make data            # bronze → silver → gold (download + preprocess + features)
 make train           # TF-IDF + LogisticRegression, salva em models/staging/
 make eval            # macro-F1, matriz de confusão, gate de qualidade
 make export-onnx     # pipeline.onnx + pipeline.int8.onnx em models/staging/
 make promote         # copia models/staging/ → models/current/ (só se o gate aprovou)
-
-make test            # 84 testes + cobertura (--cov=src)
-
-make serve            # sobe a API local, localhost:8000, backend = MODEL_BACKEND do .env
-# ou
-make docker-serve-all # api-sklearn (8000) e api-onnx (8001) em containers, lado a lado
 ```
 
 </details>
+
+**O que esperar:** o log de `eval` (ou de `docker-pipeline`) mostra o macro-F1 (val) comparado
+ao piso do gate (`MIN_MACRO_F1`, default 0,50); se aprovar, `models/current/` passa a ter 4
+arquivos (`pipeline.joblib`, `pipeline.onnx`, `pipeline.int8.onnx`, `model_meta.json`) — é o que
+as próximas etapas servem.
+
+### Etapa 2 — Subir a API e a stack de observabilidade
+
+```bash
+make monitoring-up   # api-sklearn, api-onnx, prometheus e grafana — mesmo comando nos dois caminhos
+```
+
+```bash
+curl http://localhost:8000/ready   # api-sklearn — confirma que o modelo carregou antes de aceitar tráfego
+curl http://localhost:8001/ready   # api-onnx
+
+curl -X POST http://localhost:8000/predict \
+  -H "Content-Type: application/json" \
+  -d '{"texto": "Paciente do sexo masculino, 58 anos, apresenta dor precordial em aperto com irradiação para o braço esquerdo, sudorese e dispneia associada, com início há trinta minutos."}'
+```
+
+Onde olhar agora que a stack subiu: Grafana em `localhost:3000` (`admin`/`admin`) e Prometheus
+em `localhost:9090/targets` — os 6 painéis já provisionados aparecem vazios até haver tráfego
+(detalhes de painéis, métricas e alertas em [Observabilidade](#observabilidade)).
+
+> Só a API, sem Prometheus/Grafana: `make serve` (Poetry, local, `localhost:8000`) ou
+> `make docker-serve-all` (as duas em container, sem observabilidade).
+
+**O que esperar:** os dois `/ready` devolvem `200`, o `/predict` devolve uma urgência
+(`urgente`/`atencao`/`normal`) com probabilidades, e `docker compose ps` mostra os 4 serviços
+healthy.
+
+### Etapa 3 — Rodar a orquestração (Airflow)
+
+```bash
+make airflow-up   # gera airflow/.env na 1ª vez, builda a imagem do Airflow (1ª vez, ~10 min) e sobe postgres, webserver, scheduler e dag-processor — localhost:8080
+```
+
+Abra `localhost:8080` — usuário e senha de admin foram gerados agora em `airflow/.env`, pelo
+comando acima (ver [Orquestração](#orquestração-airflow) para onde encontrá-los). A DAG
+`treino_triagem` já sobe **ativa**: entre nela e dispare direto, sem precisar despausar.
+
+Para ver a demonstração mais forte do projeto — o gate de qualidade barrando um modelo que não
+atinge o piso —, dispare de novo pela UI usando "Trigger DAG w/ config" com:
+
+```json
+{"min_macro_f1": 0.99}
+```
+
+A task `avaliacao` falha (nenhum treino real passa de 0,99 de macro-F1) e `promocao` nunca roda
+— nenhum artefato novo entra em `models/current/`.
+
+> Para validar a DAG sem abrir a UI — é o que o CI roda: `make dag-test`.
+
+**O que esperar:** com o piso default, as 8 tasks ficam verdes e `models/current/` recebe
+artefatos novos; com `min_macro_f1: 0.99`, `avaliacao` fica vermelha e o restante do grafo
+(`exportacao_onnx → promocao → benchmark_latencia`) não executa. Detalhes da DAG, do isolamento
+de perfil e do uid do host em [Orquestração](#orquestração-airflow).
+
+### Etapa 4 — Qualidade (lint, testes, CI)
+
+```bash
+make docker-lint    # ruff check + ruff format --check, mesma imagem do CI
+make docker-test    # 84 testes + cobertura (--cov=src), piso de 60%
+```
+
+Já rodou `make install` (Caminho 2)? `make lint` / `make test` fazem o mesmo sem container, mais
+rápido.
+
+**O que esperar:** lint sem erro e os 84 testes passando, com cobertura acima do piso de 60%. O
+CI (`.github/workflows/ci.yml`) roda esses mesmos 4 jobs (`lint`, `test`, `dag-validate`,
+`build`) em todo push.
 
 ---
 
@@ -335,13 +386,18 @@ detalhados no ADR.
 ## Observabilidade
 
 ```bash
-make monitoring-up      # api-sklearn, api-onnx, prometheus e grafana, do zero
-make load-test          # popula os painéis com tráfego real contra os dois backends
+make monitoring-up      # api-sklearn, api-onnx, prometheus e grafana, do zero — build só na primeira vez
 ```
 
 - Grafana: `localhost:3000` (`admin`/`admin`) — dashboard já carregado por provisionamento, sem
   importar JSON pela UI.
 - Prometheus: `localhost:9090` — alvos `api-sklearn` e `api-onnx`, scrape a cada 5s.
+
+Os painéis nascem vazios — sem tráfego, não há nada para plotar:
+
+```bash
+make load-test          # 10 rps por 60s contra sklearn, depois o mesmo contra onnx — popula os painéis
+```
 
 `GET /metrics` expõe 8 séries Prometheus: as 4 primeiras (`ml_predictions_total`,
 `ml_prediction_latency_seconds`, `ml_prediction_confidence`, `ml_active_requests`) usam o mesmo
@@ -365,14 +421,18 @@ latência por backend mostra o sklearn ganhando dos dois backends onnx — o inv
 in-process. As duas medições estão corretas; medem coisas diferentes, e a seção "sob carga" de
 [`docs/latencia.md`](docs/latencia.md) explica o porquê com números.
 
+**Quando terminar de explorar:**
+
+```bash
+make monitoring-down   # docker compose down — sem -v: os volumes do Prometheus e do Grafana continuam
+```
+
 ---
 
 ## Orquestração (Airflow)
 
 ```bash
-make airflow-up      # sobe postgres, webserver, scheduler e dag-processor — localhost:8080
-make dag-test        # valida a DAG (DagBag sem erro de import, 8 tasks, dependências) em CI
-make airflow-down
+make airflow-up      # gera airflow/.env na 1ª vez, builda a imagem do Airflow (1ª vez, ~10 min) e sobe postgres, webserver, scheduler e dag-processor — localhost:8080
 ```
 
 `make airflow-up` gera `airflow/.env` automaticamente na primeira vez, a partir de
@@ -420,6 +480,17 @@ Correspondência com a DAG de referência da disciplina (`prepare → train → 
 | `evaluate` | `avaliacao` (mesmo padrão de gate: levanta exceção se a métrica não atinge o piso) |
 | `deploy` | `exportacao_onnx` + `promocao` |
 | — | `benchmark_latencia` (extensão deste projeto, sem equivalente na referência) |
+
+> Para validar a DAG sem abrir a UI — é o que o CI roda:
+> ```bash
+> make dag-test        # valida a DAG (DagBag sem erro de import, 8 tasks, dependências)
+> ```
+
+**Quando terminar de explorar:**
+
+```bash
+make airflow-down     # docker compose down — sem -v: o volume do Postgres do Airflow continua
+```
 
 ---
 
