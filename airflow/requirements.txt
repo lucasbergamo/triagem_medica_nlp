@@ -9,3 +9,8 @@ onnxruntime
 pydantic-settings
 structlog
 requests
+httpx
+
+# tests/test_dag.py roda dentro desta imagem — o Airflow não entra no Poetry do projeto
+# (conflitaria dependências), então o pytest usado para validar a DAG vive só aqui.
+pytest

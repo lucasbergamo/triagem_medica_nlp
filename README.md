@@ -152,3 +152,47 @@ Sob carga real (concorrência de requisições HTTP, não a medição in-process
 latência acima), o painel 4 mostra o sklearn ganhando dos dois backends onnx — o inverso do
 benchmark in-process. As duas medições estão corretas; medem coisas diferentes, e a seção
 "sob carga" de [`docs/latencia.md`](docs/latencia.md) explica o porquê com números.
+
+## Orquestração (Airflow)
+
+```bash
+cp airflow/.env.example airflow/.env   # preencher POSTGRES_PASSWORD, AIRFLOW_ADMIN_PASSWORD,
+                                        # AIRFLOW__CORE__FERNET_KEY e os dois secrets de API
+                                        # (comandos de geração nos comentários do arquivo)
+make airflow-up      # sobe postgres, webserver, scheduler e dag-processor — localhost:8080
+make dag-test        # valida a DAG (DagBag sem erro de import, 8 tasks, dependências) em CI
+make airflow-down
+```
+
+Airflow 3.1.5, executor `LocalExecutor` + Postgres — decisão e alternativas descartadas em
+[`docs/adr/0005-airflow-3-local-executor.md`](docs/adr/0005-airflow-3-local-executor.md). Roda
+sob o perfil `airflow` do compose raiz, isolado do perfil default: as duas stacks não sobem
+juntas por padrão (memória limitada no ambiente de desenvolvimento local), e nenhuma depende da
+outra estar de pé.
+
+A DAG `treino_triagem` (`airflow/dags/dag_treino_triagem.py`) tem 8 tasks, cada uma uma casca
+fina sobre um módulo de `src/` ou `scripts/` — a mesma função que `make train`, `make eval` etc.
+chamam localmente:
+
+```
+prep_execution → ingestao → preparacao → treino → avaliacao ──(gate macro-F1)──→
+    exportacao_onnx → promocao → benchmark_latencia
+```
+
+`avaliacao` é o gate: macro-F1 (val) abaixo do piso (`MIN_MACRO_F1`, sobrescrevível por
+`dag_run.conf["min_macro_f1"]`) faz a task falhar e nenhum artefato é promovido — `promocao` é
+a única escrita em `models/current/` de todo o projeto, e só roda se o gate aprovou.
+`benchmark_latencia` roda **depois** da promoção, não antes: o script de benchmark sempre mede
+o modelo em `models/current/`, então medir antes da promoção mediria o modelo que está saindo,
+não o que o run treinou (detalhe registrado no ADR-0005) — a task é informativa, não gateia
+nada.
+
+Correspondência com a DAG de referência da disciplina (`prepare → train → evaluate → deploy`):
+
+| Referência | Tasks deste projeto |
+|---|---|
+| `prepare` | `ingestao` + `preparacao` |
+| `train` | `treino` |
+| `evaluate` | `avaliacao` (mesmo padrão de gate: levanta exceção se a métrica não atinge o piso) |
+| `deploy` | `exportacao_onnx` + `promocao` |
+| — | `benchmark_latencia` (extensão deste projeto, sem equivalente na referência) |
