@@ -33,12 +33,11 @@ a correspondência entre a DAG deste projeto e a DAG de referência da disciplin
 
 ### Ordem das tasks: promoção antes do benchmark de latência
 
-O desenho original do pipeline (documento de arquitetura interno) previa
-`exportação → benchmark → promoção`: medir a latência do modelo recém-exportado antes de
-promovê-lo. Na prática, o benchmark de latência sempre mede o modelo em `models/current/` — é
-o mesmo caminho que a API lê em produção, e reaproveitar esse caminho (em vez de duplicar a
-lógica de carregamento de modelo para ler de `models/staging/`) evita que o script de benchmark
-e o `Predictor` da API divirjam sobre onde um modelo "ativo" mora.
+O desenho original do pipeline previa `exportação → benchmark → promoção`: medir a latência do
+modelo recém-exportado antes de promovê-lo. Na prática, o benchmark de latência sempre mede o
+modelo em `models/current/` — é o mesmo caminho que a API lê em produção, e reaproveitar esse
+caminho (em vez de duplicar a lógica de carregamento de modelo para ler de `models/staging/`)
+evita que o script de benchmark e o `Predictor` da API divirjam sobre onde um modelo "ativo" mora.
 
 Com a promoção depois do benchmark, a task mediria o modelo que está **saindo** de produção,
 não o que este run acabou de treinar — o número gravado ficaria descolado do próprio retreino
