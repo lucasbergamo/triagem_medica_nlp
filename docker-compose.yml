@@ -4,7 +4,10 @@
 # lado é o que permite comparar os dois backends ao vivo (latência, painel do Grafana) sem
 # rebuild. Prometheus faz scrape de `/metrics` nas duas a cada 5s; Grafana sobe com datasource
 # e dashboard já provisionados — nada de importar JSON pela UI.
-# Perfil airflow: pendente, integra airflow/docker-compose.yaml quando a orquestração entrar.
+# Perfil airflow: LocalExecutor + Postgres (postgres, init, webserver, scheduler,
+# dag-processor). Isolado do perfil default por desenho — não sobem juntos (RAM limitada no
+# ambiente local de desenvolvimento). Cada task da DAG chama um módulo de src/ ou scripts/
+# diretamente, por isso a imagem monta esses diretórios também, além de data/models/metrics.
 # Perfil ci: os dois serviços abaixo, para lint/test em container (paridade com o CI do GitHub).
 name: triagem
 
@@ -14,6 +17,40 @@ x-api-healthcheck: &api-healthcheck
   timeout: 5s
   retries: 5
   start_period: 10s
+
+x-airflow-common:
+  &airflow-common
+  build:
+    context: ./airflow
+  env_file:
+    - ./airflow/.env
+  environment:
+    &airflow-common-env
+    PYTHONPATH: "/opt/airflow/dags:/opt/airflow/project"
+    AIRFLOW__CORE__EXECUTOR: "LocalExecutor"
+    AIRFLOW__CORE__DAGS_FOLDER: "/opt/airflow/dags"
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: "postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@airflow-postgres:5432/${POSTGRES_DB}"
+    AIRFLOW__CORE__AUTH_MANAGER: "airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager"
+    AIRFLOW__FAB__AUTH_BACKENDS: "airflow.providers.fab.auth_manager.api.auth.backend.session,airflow.providers.fab.auth_manager.api.auth.backend.basic_auth"
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__CORE__EXECUTION_API_SERVER_URL: "http://airflow-webserver:8080/execution/"
+    AIRFLOW__SCHEDULER__SCHEDULER_ZOMBIE_TASK_THRESHOLD: "300"
+    AIRFLOW__SCHEDULER__JOB_HEARTBEAT_SEC: "20"
+    AIRFLOW__CORE__DAGBAG_IMPORT_TIMEOUT: "60"
+  volumes:
+    - ./airflow/dags:/opt/airflow/dags
+    - ./airflow/logs:/opt/airflow/logs
+    - ./airflow/plugins:/opt/airflow/plugins
+    - ./src:/opt/airflow/project/src
+    - ./scripts:/opt/airflow/project/scripts
+    - ./tests:/opt/airflow/project/tests
+    - ./data:/opt/airflow/project/data
+    - ./models:/opt/airflow/project/models
+    - ./metrics:/opt/airflow/project/metrics
+  user: "${AIRFLOW_UID:-50000}:0"
+  networks:
+    - airflow-network
 
 services:
   api-sklearn:
@@ -91,6 +128,118 @@ services:
     profiles:
       - ci
 
+  airflow-postgres:
+    container_name: triagem-airflow-postgres
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: "${POSTGRES_USER}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+      POSTGRES_DB: "${POSTGRES_DB}"
+    volumes:
+      - airflow_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - airflow-network
+    profiles:
+      - airflow
+
+  airflow-init:
+    <<: *airflow-common
+    command: ["db", "migrate"]
+    user: "0:0"
+    depends_on:
+      airflow-postgres: { condition: service_healthy }
+    profiles:
+      - airflow
+
+  airflow-webserver:
+    <<: *airflow-common
+    hostname: airflow-webserver
+    command: api-server
+    ports: ["8080:8080"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fS http://localhost:8080/api/v2/monitor/health >/dev/null 2>&1 || exit 1"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    depends_on:
+      airflow-postgres: { condition: service_healthy }
+      airflow-init: { condition: service_completed_successfully }
+    environment:
+      <<: *airflow-common-env
+      AIRFLOW__WEBSERVER__DEFAULT_UI_LANGUAGE: "pt-BR"
+      AIRFLOW__API__WORKERS: 1
+      AIRFLOW__WEBSERVER__WORKER_REFRESH_INTERVAL: '0'
+      _AIRFLOW_WWW_USER_CREATE: "true"
+      _AIRFLOW_WWW_USER_USERNAME: "${AIRFLOW_ADMIN_USER:-admin}"
+      _AIRFLOW_WWW_USER_PASSWORD: "${AIRFLOW_ADMIN_PASSWORD:-admin}"
+      _AIRFLOW_WWW_USER_ROLE: "Admin"
+    deploy:
+      resources:
+        limits: { cpus: '1.0', memory: '1g' }
+        reservations: { cpus: '0.25', memory: '512m' }
+    profiles:
+      - airflow
+
+  airflow-scheduler:
+    <<: *airflow-common
+    hostname: airflow-scheduler
+    command: scheduler
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "airflow jobs check --job-type SchedulerJob --local || exit 1"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    depends_on:
+      airflow-webserver: { condition: service_healthy }
+      airflow-init: { condition: service_completed_successfully }
+    environment:
+      <<: *airflow-common-env
+      AIRFLOW__CORE__DAG_FILE_PROCESSOR_TIMEOUT: '300'
+    deploy:
+      resources:
+        # Com LocalExecutor as tasks (treino, exportação ONNX) rodam dentro do scheduler.
+        limits: { cpus: '2.0', memory: '2g' }
+        reservations: { cpus: '0.25', memory: '512m' }
+    profiles:
+      - airflow
+
+  airflow-dag-processor:
+    <<: *airflow-common
+    hostname: airflow-dag-processor
+    command: dag-processor
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import psutil, sys; sys.exit(0) if any('dag-processor' in ' '.join(p.cmdline()) for p in psutil.process_iter(['cmdline'])) else sys.exit(1)\""]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    depends_on:
+      airflow-init: { condition: service_completed_successfully }
+    environment:
+      <<: *airflow-common-env
+      AIRFLOW__CORE__DAG_FILE_PROCESSOR_TIMEOUT: '300'
+    deploy:
+      resources:
+        limits: { cpus: '0.5', memory: '1g' }
+        reservations: { cpus: '0.1', memory: '512m' }
+    profiles:
+      - airflow
+
 volumes:
   prometheus_data:
   grafana_data:
+  airflow_postgres_data:
+
+networks:
+  airflow-network:
+    driver: bridge

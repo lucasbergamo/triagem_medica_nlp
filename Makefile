@@ -1,6 +1,6 @@
 .PHONY: install lint format test validate data train eval export-onnx promote serve \
 	docker-serve docker-serve-onnx docker-serve-all benchmark benchmark-comparar \
-	monitoring-up monitoring-down load-test clean
+	monitoring-up monitoring-down load-test airflow-up airflow-down dag-test clean
 
 # ── Setup ──────────────────────────────────────────────────────────
 install:
@@ -68,6 +68,41 @@ monitoring-down:
 load-test:
 	poetry run python scripts/load_test.py --rps 10 --duracao 60 --backend sklearn
 	poetry run python scripts/load_test.py --rps 10 --duracao 60 --backend onnx
+
+# ── Orquestração (Airflow) ────────────────────────────────────────
+# --env-file aponta pro airflow/.env: é a fonte das variáveis que o docker compose interpola
+# no próprio compose (POSTGRES_*, AIRFLOW_UID, AIRFLOW_ADMIN_*) — sem ele, o compose não acha
+# essas variáveis (o .env da raiz é outro arquivo, para a app; env_file: no compose só injeta
+# variáveis dentro do container, não alimenta a interpolação do próprio arquivo).
+#
+# Serviços nomeados explicitamente, sem --profile: api-sklearn/api-onnx/prometheus/grafana não
+# têm `profiles:` no compose (sobem em qualquer `up` por padrão), então `--profile airflow`
+# sozinho não isola a stack de orquestração da de serving — as duas subiriam juntas. Listar os
+# serviços do perfil airflow por nome é o que garante que só eles sobem (risco 3 do projeto:
+# RAM limitada no ambiente de desenvolvimento local).
+AIRFLOW_SERVICES = airflow-postgres airflow-init airflow-webserver airflow-scheduler airflow-dag-processor
+
+airflow-up:
+	docker compose --env-file airflow/.env up -d --build $(AIRFLOW_SERVICES)
+
+airflow-down:
+	docker compose --env-file airflow/.env down $(AIRFLOW_SERVICES)
+
+dag-test:
+	docker compose --env-file airflow/.env build airflow-scheduler
+	# Sem --no-deps: o entrypoint da imagem oficial do Airflow espera o Postgres antes de
+	# executar qualquer comando, mesmo um alheio ao airflow — precisa do banco de pé, então
+	# deixamos o compose subir `airflow-postgres`/`airflow-init` como dependência.
+	# --entrypoint python3.12 -m pytest, não o script `pytest`: o entrypoint padrão da imagem
+	# trata todo argumento como subcomando do `airflow` (precisa ser substituído), e o script
+	# `pytest` tem shebang fixo em `/usr/python/bin/python3.12` (o interpretador base da
+	# imagem) — sob o UID não-root que o compose usa para rodar as tasks, esse interpretador
+	# não enxerga o site-packages de usuário onde o requirements.txt foi instalado, e o import
+	# de `_pytest` falha. `python3.12` resolvido via PATH (o do venv do Airflow) não tem esse
+	# problema.
+	docker compose --env-file airflow/.env run --rm \
+		--entrypoint python3.12 airflow-scheduler \
+		-m pytest /opt/airflow/project/tests/test_dag.py -v
 
 # ── Limpeza ───────────────────────────────────────────────────────
 clean:
