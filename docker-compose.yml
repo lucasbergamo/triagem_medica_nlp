@@ -32,7 +32,11 @@ x-airflow-common:
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: "postgresql+psycopg2://${POSTGRES_USER:-airflow}:${POSTGRES_PASSWORD:-airflow_local}@airflow-postgres:5432/${POSTGRES_DB:-airflow}"
     AIRFLOW__CORE__AUTH_MANAGER: "airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager"
     AIRFLOW__FAB__AUTH_BACKENDS: "airflow.providers.fab.auth_manager.api.auth.backend.session,airflow.providers.fab.auth_manager.api.auth.backend.basic_auth"
-    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
+    # "false", não o default do Airflow — o default existe para ambientes com dezenas de DAGs,
+    # onde subir tudo já ativo seria perigoso. Aqui só existe uma DAG, num projeto feito para
+    # ser executado e avaliado: com "true", `make airflow-up` sobe a DAG pausada, e um trigger
+    # pela UI fica parado em "queued" sem explicação nenhuma (achado testando em clone limpo).
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
     AIRFLOW__CORE__LOAD_EXAMPLES: "false"
     AIRFLOW__CORE__EXECUTION_API_SERVER_URL: "http://airflow-webserver:8080/execution/"
     AIRFLOW__SCHEDULER__SCHEDULER_ZOMBIE_TASK_THRESHOLD: "300"

@@ -380,6 +380,13 @@ make airflow-down
 secrets de API) preenchidos na hora — a senha do admin da UI fica dentro desse arquivo. Rodar de
 novo não sobrescreve um `airflow/.env` já existente.
 
+A DAG `treino_triagem` já sobe **ativa e agendada** (`AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION:
+"false"`) — diferente do default do Airflow, pensado para ambientes com dezenas de DAGs, onde
+subir tudo já ativo seria arriscado. Aqui só existe uma DAG, num projeto feito para ser executado
+e avaliado: com o default, um trigger pela UI logo após o primeiro `make airflow-up` ficaria
+parado em "queued" sem nenhuma explicação. Abra `localhost:8080`, entre em `treino_triagem` e
+dispare direto — não precisa despausar antes.
+
 Airflow 3.1.5, executor `LocalExecutor` + Postgres — decisão e alternativas descartadas em
 [ADR-0005](docs/adr/0005-airflow-3-local-executor.md). Roda sob o perfil `airflow` do compose
 raiz, isolado do perfil default: as duas stacks não sobem juntas por padrão (memória limitada no
