@@ -111,6 +111,17 @@ services:
     build:
       context: .
       target: lint
+    # Não mapeia volume nenhum, então não tem o problema de arquivo-de-root do `ci` abaixo —
+    # roda com o uid/gid do host por consistência (nenhum serviço deste compose roda como
+    # root por padrão).
+    user: "${CURRENT_UID:-1000}:${CURRENT_GID:-1000}"
+    # RUFF_NO_CACHE: sem isso, o ruff tenta gravar /app/.ruff_cache dentro da própria imagem
+    # (não é um volume montado), e essa árvore pertence a root (construída no build, antes do
+    # `user:` acima existir) — o uid do host não tem permissão de escrita nela. O cache não
+    # sobreviveria de qualquer forma: o container é `--rm`, descartado a cada `docker compose
+    # run`.
+    environment:
+      - RUFF_NO_CACHE=true
     command: ["sh", "-c", "ruff check src/ tests/ scripts/ && ruff format --check src/ tests/ scripts/"]
     profiles:
       - ci
@@ -120,6 +131,18 @@ services:
     build:
       context: .
       target: ci
+    # Sem isso, o container roda como root (a imagem não declara USER) e os arquivos que ele
+    # escreve em data/silver, data/gold, models/ e metrics/ saem donos de root — o Airflow,
+    # rodando com o uid do host, não consegue sobrescrevê-los depois (ex.: a task `preparacao`
+    # falhando com PermissionError ao regravar data/silver/laudos.parquet). O default cobre
+    # quem chama `docker compose` direto, sem passar pelo Makefile.
+    user: "${CURRENT_UID:-1000}:${CURRENT_GID:-1000}"
+    # COVERAGE_FILE: mesmo motivo do RUFF_NO_CACHE do serviço `lint` acima — o pytest-cov por
+    # padrão grava `.coverage` em /app (a raiz da imagem, root-owned, não um volume montado),
+    # e o uid do host não tem permissão de escrita ali. /tmp é world-writable em qualquer
+    # imagem Debian/Python; o arquivo não precisa sobreviver ao container (`--rm`).
+    environment:
+      - COVERAGE_FILE=/tmp/.coverage
     command: ["pytest", "tests/", "-v", "--tb=short", "--cov=src", "--cov-report=term-missing"]
     volumes:
       - ./data:/app/data

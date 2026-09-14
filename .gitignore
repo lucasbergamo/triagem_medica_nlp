@@ -47,9 +47,13 @@ metrics/*
 !metrics/latency_baseline.json
 !metrics/latency_benchmark.json
 
-# Airflow — estado local, nunca commitado
+# Airflow — estado local, nunca commitado. airflow/logs/ é exceção parcial: a pasta em si
+# precisa existir no clone (senão o Docker a cria como root no primeiro `docker compose up`,
+# e o container, rodando com o uid do host, não consegue escrever nela) — só o conteúdo é
+# ignorado.
 airflow/.env
-airflow/logs/
+airflow/logs/*
+!airflow/logs/.gitkeep
 
 # IDEs
 .vscode/

@@ -2,12 +2,18 @@
 	docker-serve docker-serve-onnx docker-serve-all benchmark benchmark-comparar \
 	monitoring-up monitoring-down load-test airflow-up airflow-down dag-test clean
 
-# Uid do host, para os alvos airflow-*: o Compose dá precedência a variável de ambiente do
-# shell sobre o valor de --env-file, então isso vale para qualquer pessoa que rode `make
-# airflow-up`, sem depender de editar airflow/.env à mão — os artefatos que a DAG escreve em
-# data/, models/ e metrics/ (montados por volume) saem com o dono certo, não com o uid 50000
-# do container.
+# Uid/gid do host: o Compose dá precedência a variável de ambiente do shell sobre o valor de
+# --env-file ou de default no próprio compose.yml, então isso vale para qualquer pessoa que
+# rode `make`, sem depender de editar nada à mão.
+# - AIRFLOW_UID: os artefatos que a DAG escreve em data/, models/ e metrics/ (montados por
+#   volume) saem com o dono certo, não com o uid 50000 do container.
+# - CURRENT_UID/CURRENT_GID: os serviços `lint`/`ci` do compose (perfil `ci`) rodam com esse
+#   uid/gid — sem isso, os arquivos que o `ci` escreve em data/silver, data/gold, models/ e
+#   metrics/ saem donos de root, e o Airflow (rodando com o uid do host) não consegue
+#   sobrescrevê-los depois.
 export AIRFLOW_UID := $(shell id -u)
+export CURRENT_UID := $(shell id -u)
+export CURRENT_GID := $(shell id -g)
 
 # ── Setup ──────────────────────────────────────────────────────────
 install:
@@ -90,6 +96,11 @@ load-test:
 AIRFLOW_SERVICES = airflow-postgres airflow-init airflow-webserver airflow-scheduler airflow-dag-processor
 
 airflow-up:
+	# airflow/logs/ está fora do git (estado local) e o compose monta esse diretório num
+	# volume — se ele não existe, o Docker o cria como root na primeira subida, e o container
+	# (rodando com o uid do host) não consegue escrever nele. mkdir -p aqui garante que a
+	# pasta já existe com o dono certo antes do primeiro `up`.
+	mkdir -p airflow/logs
 	docker compose --env-file airflow/.env up -d --build $(AIRFLOW_SERVICES)
 
 airflow-down:
