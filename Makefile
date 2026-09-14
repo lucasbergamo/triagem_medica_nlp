@@ -2,6 +2,13 @@
 	docker-serve docker-serve-onnx docker-serve-all benchmark benchmark-comparar \
 	monitoring-up monitoring-down load-test airflow-up airflow-down dag-test clean
 
+# Uid do host, para os alvos airflow-*: o Compose dá precedência a variável de ambiente do
+# shell sobre o valor de --env-file, então isso vale para qualquer pessoa que rode `make
+# airflow-up`, sem depender de editar airflow/.env à mão — os artefatos que a DAG escreve em
+# data/, models/ e metrics/ (montados por volume) saem com o dono certo, não com o uid 50000
+# do container.
+export AIRFLOW_UID := $(shell id -u)
+
 # ── Setup ──────────────────────────────────────────────────────────
 install:
 	poetry install

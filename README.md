@@ -379,6 +379,11 @@ Airflow 3.1.5, executor `LocalExecutor` + Postgres — decisão e alternativas d
 raiz, isolado do perfil default: as duas stacks não sobem juntas por padrão (memória limitada no
 ambiente de desenvolvimento local), e nenhuma depende da outra estar de pé.
 
+Os alvos `make airflow-*` já exportam `AIRFLOW_UID` com o uid de quem chama o make — sem isso,
+o container roda com o uid do Airflow (50000) e os artefatos que a DAG escreve em `data/`,
+`models/` e `metrics/` (montados por volume) saem com dono diferente do seu usuário no host,
+o que quebra as tasks de treino e promoção com `PermissionError`.
+
 A DAG `treino_triagem` (`airflow/dags/dag_treino_triagem.py`) tem 8 tasks, cada uma uma casca
 fina sobre um módulo de `src/` ou `scripts/` — a mesma função que `make train`, `make eval` etc.
 chamam localmente:
