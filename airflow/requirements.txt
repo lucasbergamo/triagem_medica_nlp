@@ -1,12 +1,18 @@
 # Dependências das tasks da DAG — cada task chama um módulo de src/,
 # então a imagem do Airflow precisa das mesmas bibliotecas do projeto.
+#
+# scikit-learn, pandas e pyarrow ficam sem pin aqui de propósito: o constraints.txt da Apache
+# (abaixo) fixa versões mais antigas dessas três, e um pin explícito neste arquivo entra em
+# conflito com o constraint (ResolutionImpossible no build). scikit-learn é a única das três
+# cuja versão muda o resultado numérico do treino — a versão exata é forçada à parte, no
+# Dockerfile, fora do constraint. pandas e pyarrow só leem parquet, não afetam o treino.
 scikit-learn
 pandas
 pyarrow
-skl2onnx
-onnx
-onnxruntime
-pydantic-settings
+skl2onnx==1.20.0
+onnx==1.22.0
+onnxruntime==1.30.0
+pydantic-settings==2.15.0
 structlog
 requests
 httpx

@@ -107,6 +107,28 @@ motivo explicado na seção acima. `metrics/eval_metrics.json` grava os dois blo
 `MIN_MACRO_F1=0.99`: o `make eval` falha com exit code 1, a mensagem cita explicitamente
 "macro-F1 (val)" e lista a falha — nenhum artefato é promovido.
 
+## Reprodutibilidade entre ambientes — local vs. DAG do Airflow
+
+Os números publicados neste documento e no README (val 0,7429 / test 0,7562) vêm de `make train`
+rodando no ambiente do projeto (`poetry.lock`: scikit-learn 1.9.1, numpy 2.4.6, scipy 1.17.1). A
+DAG `treino_triagem` (ADR-0005) treina o mesmo código, sobre os mesmos dados, dentro da imagem do
+Airflow — cujo ecossistema (`airflow/constraints.txt`, da Apache) fixa numpy 1.26.4 e scipy
+1.16.3. Medido: a DAG produz val 0,7420 / test 0,7530 — uma diferença de ~0,003, na terceira
+casa decimal.
+
+A causa é o backend numérico (BLAS/LAPACK) por trás de `LogisticRegression.fit`, não código nem
+dado: o split de dados é idêntico nos dois ambientes, confirmado pelo mesmo `split_hash`
+(`7e8de5fa1d2760a2`) em `data/gold/metadata.parquet`. O scikit-learn foi explicitamente alinhado
+para 1.9.1 nas duas pontas (`airflow/Dockerfile` instala essa versão à parte do
+`constraints.txt`, que fixaria 1.8.0) justamente para reduzir essa superfície de divergência — o
+que sobra é numpy/scipy, que o `constraints.txt` do Airflow fixa e que trocar exigiria uma versão
+de numpy fora do que aquele ecossistema testa e garante.
+
+É por isso que o gate de qualidade (`src/models/evaluate.py::validar()`) compara contra um
+**piso** (`macro-F1 ≥ MIN_MACRO_F1`), não uma igualdade com um número fixo: um pipeline de
+retreino que exigisse bater exatamente 0,7562 quebraria na primeira variação legítima de
+ambiente, mesmo com o modelo continuando bom o suficiente para produção.
+
 ## Limitações
 
 - **O rótulo é um proxy, não triagem clínica real** — ver ressalva completa em `docs/dataset.md`.
