@@ -61,6 +61,10 @@ airflow/logs/
 Thumbs.db
 desktop.ini
 
+# Instruções para sessões de IA — ferramenta de desenvolvimento, não entregável.
+# O arquivo continua no disco para as sessões lerem; a cópia arquivada vive fora deste repo.
+CLAUDE.md
+
 # Variáveis de ambiente
 .env
 .env.local
