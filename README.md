@@ -1,5 +1,7 @@
 # Triagem Médica NLP
 
+[![CI](https://github.com/lucasbergamo/triagem_medica_nlp/actions/workflows/ci.yml/badge.svg)](https://github.com/lucasbergamo/triagem_medica_nlp/actions/workflows/ci.yml)
+
 > Tech Challenge Fase 03 — FIAP Pós-Tech MLET. Triagem automática de laudos médicos por
 > urgência, com o ciclo de vida completo do modelo (deploy, monitoramento, CI/CD, orquestração)
 > como foco de avaliação — não a acurácia do classificador.

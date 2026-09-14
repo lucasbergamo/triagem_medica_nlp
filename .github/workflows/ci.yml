@@ -19,6 +19,13 @@ jobs:
       - name: Instalar Poetry
         run: pipx install poetry==2.4.1
 
+      - name: Cache de dependências Poetry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pypoetry
+          key: poetry-${{ runner.os }}-${{ hashFiles('poetry.lock') }}
+          restore-keys: poetry-${{ runner.os }}-
+
       - name: Instalar dependências
         run: poetry install --no-interaction --no-ansi
 
@@ -43,11 +50,115 @@ jobs:
       - name: Instalar Poetry
         run: pipx install poetry==2.4.1
 
+      - name: Cache de dependências Poetry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pypoetry
+          key: poetry-${{ runner.os }}-${{ hashFiles('poetry.lock') }}
+          restore-keys: poetry-${{ runner.os }}-
+
       - name: Instalar dependências
         run: poetry install --no-interaction --no-ansi
 
       - name: Rodar testes com cobertura
         run: poetry run pytest tests/ -v --tb=short --cov=src --cov-report=term-missing
 
-  # dag-validate (validação da DAG do Airflow) e build (smoke test do container da API)
-  # ainda entram.
+  dag-validate:
+    name: Validação da DAG (Airflow)
+    runs-on: ubuntu-latest
+    needs: lint
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      # A imagem oficial do Airflow espera o Postgres de pé e o webserver saudável antes de
+      # qualquer comando no scheduler (depends_on do compose, não o entrypoint em si) — por
+      # isso o job sobe a stack inteira do perfil airflow, não só builda e roda pytest solto.
+      # Segredos gerados na hora: só existem dentro deste job, nunca commitados (airflow/.env
+      # está no .gitignore) e não precisam ser estáveis entre runs.
+      - name: Gerar airflow/.env para o job
+        run: |
+          fernet_key=$(python3 -c "import base64, secrets; print(base64.urlsafe_b64encode(secrets.token_bytes(32)).decode())")
+          cat > airflow/.env <<EOF
+          POSTGRES_USER=airflow
+          POSTGRES_PASSWORD=$(openssl rand -hex 16)
+          POSTGRES_DB=airflow
+          AIRFLOW_UID=50000
+          AIRFLOW_ADMIN_USER=admin
+          AIRFLOW_ADMIN_PASSWORD=$(openssl rand -hex 16)
+          AIRFLOW__CORE__FERNET_KEY=${fernet_key}
+          AIRFLOW__API_AUTH__JWT_SECRET=$(openssl rand -hex 32)
+          AIRFLOW__API__SECRET_KEY=$(openssl rand -hex 32)
+          EOF
+
+      - name: Subir a stack do Airflow
+        run: make airflow-up
+
+      - name: Validar a DAG (DagBag sem erro de import, 8 tasks, dependências)
+        run: make dag-test
+
+      - name: Logs dos serviços do Airflow (diagnóstico)
+        if: always()
+        run: docker compose --env-file airflow/.env logs airflow-webserver airflow-scheduler airflow-init --tail=200
+
+      - name: Derrubar a stack do Airflow
+        if: always()
+        run: make airflow-down
+
+  build:
+    name: Build e smoke test da API
+    runs-on: ubuntu-latest
+    needs: test
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instalar Poetry
+        run: pipx install poetry==2.4.1
+
+      - name: Cache de dependências Poetry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pypoetry
+          key: poetry-${{ runner.os }}-${{ hashFiles('poetry.lock') }}
+          restore-keys: poetry-${{ runner.os }}-
+
+      - name: Instalar dependências
+        run: poetry install --no-interaction --no-ansi
+
+      # O estágio `serve` do Dockerfile embute models/current/ na imagem (Fargate não tem disco
+      # persistente), e esse diretório não existe num clone limpo. bronze já está commitado
+      # (§2.3 da arquitetura), então o pipeline inteiro roda offline e em menos de um minuto —
+      # não há motivo para um modelo de fixture aqui.
+      - name: Gerar os artefatos do modelo (dados → treino → avaliação → export ONNX → promoção)
+        run: make data train eval export-onnx promote
+
+      - name: Build da imagem de serving
+        run: docker build --target serve -t triagem-api:ci .
+
+      - name: Subir o container
+        run: docker run -d --name triagem-api-ci -p 8000:8000 triagem-api:ci
+
+      - name: Aguardar /ready e checar /health
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:8000/ready >/dev/null 2>&1; then
+              break
+            fi
+            sleep 2
+          done
+          curl -fsS http://localhost:8000/health
+          curl -fsS http://localhost:8000/ready
+
+      - name: Logs do container (diagnóstico)
+        if: always()
+        run: docker logs triagem-api-ci
+
+      - name: Derrubar o container
+        if: always()
+        run: docker rm -f triagem-api-ci
