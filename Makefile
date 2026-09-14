@@ -1,6 +1,7 @@
 .PHONY: install lint format test validate data train eval export-onnx promote serve \
-	docker-serve docker-serve-onnx docker-serve-all benchmark benchmark-comparar \
-	monitoring-up monitoring-down load-test airflow-up airflow-down dag-test clean
+	docker-serve docker-serve-onnx docker-serve-all docker-pipeline docker-lint docker-test \
+	benchmark benchmark-comparar monitoring-up monitoring-down load-test airflow-up \
+	airflow-down dag-test clean
 
 # Uid/gid do host: o Compose dá precedência a variável de ambiente do shell sobre o valor de
 # --env-file ou de default no próprio compose.yml, então isso vale para qualquer pessoa que
@@ -64,6 +65,21 @@ docker-serve-onnx:
 
 docker-serve-all:
 	docker compose up --build api-sklearn api-onnx
+
+# Alvos em container, espelhando install/lint/test/data/train/eval/export-onnx/promote —
+# para quem quer executar e avaliar o projeto sem Python nem Poetry no host (Caminho 1 do
+# README). Usam os serviços `lint`/`ci` do perfil `ci`, que já existem no compose.
+docker-pipeline:
+	docker compose --profile ci run --rm --build ci sh -c \
+		"python -m src.data.pipeline && python -m src.models.train && \
+		 python -m src.models.evaluate && python -m src.models.export_onnx && \
+		 python -m src.models.registry"
+
+docker-lint:
+	docker compose --profile ci run --rm --build lint
+
+docker-test:
+	docker compose --profile ci run --rm --build ci
 
 benchmark:
 	poetry run python scripts/benchmark_latency.py
