@@ -55,3 +55,6 @@ known-first-party = ["src"]
 testpaths = ["tests"]
 pythonpath = ["."]
 addopts = "-v --tb=short"
+
+[tool.coverage.report]
+fail_under = 60
