@@ -101,6 +101,7 @@ airflow-up:
 	# (rodando com o uid do host) não consegue escrever nele. mkdir -p aqui garante que a
 	# pasta já existe com o dono certo antes do primeiro `up`.
 	mkdir -p airflow/logs
+	python3 scripts/gen_airflow_env.py
 	docker compose --env-file airflow/.env up -d --build $(AIRFLOW_SERVICES)
 
 airflow-down:

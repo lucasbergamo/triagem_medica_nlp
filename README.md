@@ -368,13 +368,15 @@ in-process. As duas medições estão corretas; medem coisas diferentes, e a se�
 ## Orquestração (Airflow)
 
 ```bash
-cp airflow/.env.example airflow/.env   # preencher POSTGRES_PASSWORD, AIRFLOW_ADMIN_PASSWORD,
-                                        # AIRFLOW__CORE__FERNET_KEY e os dois secrets de API
-                                        # (comandos de geração nos comentários do arquivo)
 make airflow-up      # sobe postgres, webserver, scheduler e dag-processor — localhost:8080
 make dag-test        # valida a DAG (DagBag sem erro de import, 8 tasks, dependências) em CI
 make airflow-down
 ```
+
+`make airflow-up` gera `airflow/.env` automaticamente na primeira vez, a partir de
+`airflow/.env.example`, com os segredos (senha do Postgres, senha do admin, chave Fernet, dois
+secrets de API) preenchidos na hora — a senha do admin da UI fica dentro desse arquivo. Rodar de
+novo não sobrescreve um `airflow/.env` já existente.
 
 Airflow 3.1.5, executor `LocalExecutor` + Postgres — decisão e alternativas descartadas em
 [ADR-0005](docs/adr/0005-airflow-3-local-executor.md). Roda sob o perfil `airflow` do compose
