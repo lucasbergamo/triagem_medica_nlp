@@ -105,7 +105,9 @@ Por classe (test):
 
 Resultado acima da faixa de 0,55–0,68 estimada antes do treino para este corpus e este proxy de
 rótulo — leitura honesta de por quê, análise de erro por matriz de confusão e limitações do
-modelo em [`docs/model_card.md`](docs/model_card.md).
+modelo em [`docs/model_card.md`](docs/model_card.md). O treino pela DAG do Airflow reproduz
+esses números com uma diferença de ~0,003 (terceira casa decimal) por rodar num ecossistema de
+numpy/scipy diferente do projeto — ver "Reprodutibilidade entre ambientes" no model card.
 
 ---
 
