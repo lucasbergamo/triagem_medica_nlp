@@ -173,7 +173,13 @@ triagem_medica_nlp/
 
 ## Início Rápido
 
-**Pré-requisitos:** Python 3.11+, [Poetry](https://python-poetry.org/), Docker + Docker Compose, git.
+**Pré-requisitos por caminho** — os dois não pedem a mesma coisa:
+
+- **Caminho 1 (Docker):** Docker + Docker Compose e git. Só isso — nada de Python nem Poetry
+  no host. Caminho recomendado para executar e avaliar o projeto.
+- **Caminho 2 (Poetry):** Python 3.11+, [Poetry](https://python-poetry.org/) **2.0 ou
+  superior** (obrigatório: o `poetry.lock` deste repo usa o formato de lock do Poetry 2.x, e o
+  1.8 recusa o arquivo — testado), e Docker, usado só para observabilidade e Airflow.
 
 ```bash
 git clone https://github.com/lucasbergamo/triagem_medica_nlp.git
@@ -183,7 +189,7 @@ cd triagem_medica_nlp
 Os dois caminhos abaixo geram o mesmo resultado — API de pé em `localhost:8000`, servindo o
 classificador de urgência. Escolha um, ou rode os dois.
 
-### 🐳 Caminho 1 — Docker
+### 🐳 Caminho 1 — Docker (recomendado)
 
 <details open>
 <summary><strong>Passo a passo completo</strong></summary>
@@ -193,11 +199,7 @@ cp .env.example .env
 
 # 1. Gera os artefatos do modelo (dados → treino → avaliação → export ONNX → promoção),
 #    rodando cada estágio em container — não precisa de Python nem Poetry no host.
-docker compose --profile ci build ci
-docker compose --profile ci run --rm ci sh -c \
-  "python -m src.data.pipeline && python -m src.models.train && \
-   python -m src.models.evaluate && python -m src.models.export_onnx && \
-   python -m src.models.registry"
+make docker-pipeline
 
 # 2. Sobe as duas APIs (backends diferentes, mesma imagem) + Prometheus + Grafana
 docker compose up -d --build
@@ -214,8 +216,8 @@ curl http://localhost:8001/ready   # api-onnx
 Lint e testes, na mesma paridade do CI:
 
 ```bash
-docker compose --profile ci run --rm lint
-docker compose --profile ci run --rm ci pytest tests/ -v --cov=src
+make docker-lint
+make docker-test
 ```
 
 </details>
@@ -368,13 +370,22 @@ in-process. As duas medições estão corretas; medem coisas diferentes, e a se�
 ## Orquestração (Airflow)
 
 ```bash
-cp airflow/.env.example airflow/.env   # preencher POSTGRES_PASSWORD, AIRFLOW_ADMIN_PASSWORD,
-                                        # AIRFLOW__CORE__FERNET_KEY e os dois secrets de API
-                                        # (comandos de geração nos comentários do arquivo)
 make airflow-up      # sobe postgres, webserver, scheduler e dag-processor — localhost:8080
 make dag-test        # valida a DAG (DagBag sem erro de import, 8 tasks, dependências) em CI
 make airflow-down
 ```
+
+`make airflow-up` gera `airflow/.env` automaticamente na primeira vez, a partir de
+`airflow/.env.example`, com os segredos (senha do Postgres, senha do admin, chave Fernet, dois
+secrets de API) preenchidos na hora — a senha do admin da UI fica dentro desse arquivo. Rodar de
+novo não sobrescreve um `airflow/.env` já existente.
+
+A DAG `treino_triagem` já sobe **ativa e agendada** (`AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION:
+"false"`) — diferente do default do Airflow, pensado para ambientes com dezenas de DAGs, onde
+subir tudo já ativo seria arriscado. Aqui só existe uma DAG, num projeto feito para ser executado
+e avaliado: com o default, um trigger pela UI logo após o primeiro `make airflow-up` ficaria
+parado em "queued" sem nenhuma explicação. Abra `localhost:8080`, entre em `treino_triagem` e
+dispare direto — não precisa despausar antes.
 
 Airflow 3.1.5, executor `LocalExecutor` + Postgres — decisão e alternativas descartadas em
 [ADR-0005](docs/adr/0005-airflow-3-local-executor.md). Roda sob o perfil `airflow` do compose
