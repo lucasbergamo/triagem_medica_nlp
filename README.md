@@ -251,20 +251,36 @@ curl http://localhost:8001/ready   # api-onnx
 
 curl -X POST http://localhost:8000/predict \
   -H "Content-Type: application/json" \
-  -d '{"texto": "Paciente do sexo masculino, 58 anos, apresenta dor precordial em aperto com irradiação para o braço esquerdo, sudorese e dispneia associada, com início há trinta minutos."}'
+  -d '{"texto": "The survivors of childhood solid tumors. With the improvement in cancer therapy in recent years, the number of cancer survivors is rapidly increasing. Potential late medical and psychosocial sequelae of cancer therapy are reviewed. A practical guide for the primary health care giver is provided."}'
 ```
 
-Onde olhar agora que a stack subiu: Grafana em `localhost:3000` (`admin`/`admin`) e Prometheus
-em `localhost:9090/targets` — os 6 painéis já provisionados aparecem vazios até haver tráfego.
-Esta etapa é só o passo a passo pra ver funcionando; a seção
+> **Resposta esperada:** `"urgencia": "urgente"`, confiança ~0,86
+> (`{"atencao": 0.08, "normal": 0.06, "urgente": 0.86}`). É um laudo real de
+> `data/gold/test.parquet`, em inglês — o idioma do corpus de treino importa aqui, ver a nota em
+> [API de Triagem](#api-de-triagem-serving).
+
+Os painéis do Grafana ainda estão vazios — sem tráfego, não há o que plotar:
+
+```bash
+make load-test   # 10 rps por 60s contra sklearn, depois o mesmo contra onnx, com laudos reais do conjunto de teste — ~2 min no total
+```
+
+Isso popula 5 dos 6 painéis (requisições, latência HTTP, urgências preditas, confiança média e
+— por rodar contra os dois backends — latência de inferência por backend, lado a lado). A taxa
+de erro fica em zero: o `load-test` só manda entrada válida; ela só sai do zero se você mandar
+uma requisição inválida de propósito (ex.: `texto` vazio, que a API rejeita com `422`).
+
+Onde olhar: Grafana em `localhost:3000` (`admin`/`admin`) e Prometheus em
+`localhost:9090/targets`. Esta etapa é só o passo a passo pra ver funcionando; a seção
 [Observabilidade](#observabilidade) explica o que cada painel e métrica significa.
 
 > Só a API, sem Prometheus/Grafana: `make serve` (Poetry, local, `localhost:8000`) ou
 > `make docker-serve-all` (as duas em container, sem observabilidade).
 
-**O que esperar:** os dois `/ready` devolvem `200`, o `/predict` devolve uma urgência
-(`urgente`/`atencao`/`normal`) com probabilidades, e `docker compose ps` mostra os 4 serviços
-healthy.
+**O que esperar:** os dois `/ready` devolvem `200`, o `/predict` devolve a resposta esperada
+acima, `docker compose ps` mostra os 4 serviços healthy, e depois do `load-test` 5 dos 6 painéis
+do Grafana saem do zero (taxa de erro continua em zero — é o comportamento correto, não falta
+nada).
 
 ### Etapa 3 — Rodar a orquestração (Airflow)
 
@@ -330,17 +346,17 @@ CI (`.github/workflows/ci.yml`) roda esses mesmos 4 jobs (`lint`, `test`, `dag-v
 | `GET` | `/metrics` | Exposição Prometheus (OpenMetrics) |
 
 ```jsonc
-// POST /predict → request
-{ "texto": "Paciente apresenta dor precordial em aperto com irradiação..." }
+// POST /predict → request — laudo real de data/gold/test.parquet, em inglês (ver nota abaixo)
+{ "texto": "The survivors of childhood solid tumors. With the improvement in cancer therapy in recent years, the number of cancer survivors is rapidly increasing. Potential late medical and psychosocial sequelae of cancer therapy are reviewed. A practical guide for the primary health care giver is provided." }
 
 // POST /predict → response
 {
   "urgencia": "urgente",
-  "confianca": 0.87,
-  "probabilidades": { "normal": 0.04, "atencao": 0.09, "urgente": 0.87 },
-  "latencia_inferencia_ms": 1.83,
+  "confianca": 0.86,
+  "probabilidades": { "atencao": 0.08, "normal": 0.06, "urgente": 0.86 },
+  "latencia_inferencia_ms": 1.2,
   "backend": "sklearn",
-  "modelo_versao": "2026-09-11T21:06:11.536960+00:00"
+  "modelo_versao": "2026-09-14T20:55:40.726904+00:00"
 }
 ```
 
@@ -350,6 +366,15 @@ segue o mesmo contrato de item, sob a chave `resultados`.
 
 O backend de inferência (`sklearn`, `onnx` ou `onnx-int8`) é escolhido por `MODEL_BACKEND`, lido
 em runtime — a mesma imagem serve os três, sem rebuild.
+
+> **Por que o exemplo acima está em inglês:** o TF-IDF foi ajustado sobre o vocabulário do
+> Medical Abstracts TC Corpus, que é todo em inglês — termos em português não têm coluna nesse
+> vocabulário e são descartados no vetor de entrada. Um laudo em português vira, na prática, um
+> vetor quase todo zerado; sem evidência nenhuma, o modelo devolve a distribuição a priori das
+> classes (as três probabilidades próximas de ~33%, quem decide é o intercepto, não o texto) —
+> não é bug, é a resposta correta para "nenhuma evidência". É limitação do corpus escolhido, não
+> do pipeline: um corpus de laudos em português no lugar do atual não mudaria nenhuma outra
+> camada do sistema (mesmo TF-IDF, mesmo classificador, mesmo contrato de API).
 
 ---
 

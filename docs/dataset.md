@@ -7,6 +7,7 @@
 - **Acesso:** público, sem login, sem API key, sem credenciamento (Kaggle ou similar). Verificado em 01/09/2026, confirmado em execução em 11/09/2026 — `HTTP 200` direto.
 - **Arquivos:** `medical_tc_train.csv` (11.550 linhas), `medical_tc_test.csv` (2.888 linhas), `medical_tc_labels.csv` (5 linhas) — 18 MB no total. Baixados para `data/bronze/` por `src/data/load.py` e comitados no git (sem DVC — o volume é pequeno o bastante para não justificar a dependência extra, e garante que um clone reproduza os dados sem precisar baixar nada).
 - **Colunas do bronze:** `condition_label` (inteiro, 1–5) e `medical_abstract` (texto livre); `medical_tc_labels.csv` traduz `condition_label` para `condition_name`.
+- **Idioma:** `medical_abstract` é todo em inglês — o corpus de origem não tem exemplo nem tradução em outro idioma, e o TF-IDF treinado sobre esse vocabulário não reconhece termos em português (ver limitação em `docs/model_card.md`).
 
 ## O rótulo de urgência é um proxy — não um rótulo clínico real
 
