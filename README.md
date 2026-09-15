@@ -262,8 +262,15 @@ curl -X POST http://localhost:8000/predict \
 Os painéis do Grafana ainda estão vazios — sem tráfego, não há o que plotar:
 
 ```bash
-make load-test   # 10 rps por 60s contra sklearn, depois o mesmo contra onnx, com laudos reais do conjunto de teste — ~2 min no total
+make docker-load-test   # caminho Docker: roda o gerador de carga dentro da rede do compose
+# ou
+make load-test          # caminho Poetry: mesmo gerador, a partir do host
 ```
+
+Os dois fazem a mesma coisa (10 rps por 60s contra cada backend, com laudos reais do conjunto
+de teste, ~2 min no total). Mudam só de onde disparam: `docker-load-test` roda de dentro da rede
+do compose, e é o que funciona para quem não tem Poetry no host; `load-test` roda do host e
+precisa do ambiente do Caminho 2.
 
 Isso popula 5 dos 6 painéis (requisições, latência HTTP, urgências preditas, confiança média e
 — por rodar contra os dois backends — latência de inferência por backend, lado a lado). A taxa
@@ -380,9 +387,13 @@ em runtime — a mesma imagem serve os três, sem rebuild.
 
 ## Otimização de Latência
 
-Medição pura de `predictor.predict()` — sem HTTP nem serialização — via
+Medição pura de `predictor.predict()`, sem HTTP nem serialização, via
 `scripts/benchmark_latency.py --comparar`: 200 iterações de aquecimento descartadas, 1.000
 medições com `time.perf_counter_ns`, amostras reais do conjunto de test.
+
+> Reproduzir a medição (`make benchmark` e `make benchmark-comparar`) exige o ambiente do
+> Caminho 2 (Poetry): são os dois únicos alvos do projeto sem equivalente em container, porque
+> medem latência in-process e rodar dentro de um container acrescentaria overhead ao número.
 
 | Backend | p50 (ms) | p95 (ms) | p99 (ms) | Speedup p95 |
 |---|---|---|---|---|
@@ -440,7 +451,9 @@ make monitoring-up      # api-sklearn, api-onnx, prometheus e grafana, do zero �
 Os painéis nascem vazios — sem tráfego, não há nada para plotar:
 
 ```bash
-make load-test          # 10 rps por 60s contra sklearn, depois o mesmo contra onnx — popula os painéis
+make docker-load-test   # de dentro da rede do compose, sem Poetry no host
+# ou
+make load-test          # do host, exige o ambiente Poetry do Caminho 2
 ```
 
 `GET /metrics` expõe 8 séries Prometheus: as 4 primeiras (`ml_predictions_total`,

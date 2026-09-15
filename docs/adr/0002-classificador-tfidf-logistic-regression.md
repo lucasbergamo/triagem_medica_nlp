@@ -16,10 +16,23 @@ na escolha do algoritmo tanto quanto a métrica de qualidade.
 
 Pipeline de dois estágios (`src/models/train.py`):
 
-```
-TfidfVectorizer(ngram_range=(1, 2), min_df=3, max_features=50_000,
-                sublinear_tf=True, strip_accents="unicode", lowercase=True)
-→ LogisticRegression(class_weight="balanced", max_iter=1000, C=1.0)
+```python
+Pipeline([
+    ("tfidf", TfidfVectorizer(
+        ngram_range=(1, 2),
+        min_df=3,
+        max_features=50_000,
+        sublinear_tf=True,
+        strip_accents="unicode",
+        lowercase=True,
+    )),
+    ("clf", LogisticRegression(
+        class_weight="balanced",
+        max_iter=1000,
+        C=1.0,
+        random_state=seed,
+    )),
+])
 ```
 
 Random Forest — o algoritmo usado como exemplo na disciplina — entra como **baseline de

@@ -1,5 +1,6 @@
 .PHONY: install lint format test validate data train eval export-onnx promote serve \
 	docker-serve docker-serve-onnx docker-serve-all docker-pipeline docker-lint docker-test \
+	docker-load-test \
 	benchmark benchmark-comparar monitoring-up monitoring-down load-test airflow-up \
 	airflow-down dag-test clean
 
@@ -80,6 +81,15 @@ docker-lint:
 
 docker-test:
 	docker compose --profile ci run --rm --build ci
+
+# Mesmo gerador de carga do `load-test`, mas de dentro da rede do compose, para quem seguiu o
+# caminho Docker e não tem Poetry no host. O endereço precisa ser explícito: na rede interna as
+# duas APIs escutam na 8000, e o mapeamento para a 8001 só existe do lado de fora.
+docker-load-test:
+	docker compose --profile ci run --rm --build ci python scripts/load_test.py \
+	  --base-url http://api-sklearn:8000 --backend sklearn --rps 10 --duracao 60
+	docker compose --profile ci run --rm ci python scripts/load_test.py \
+	  --base-url http://api-onnx:8000 --backend onnx --rps 10 --duracao 60
 
 benchmark:
 	poetry run python scripts/benchmark_latency.py
