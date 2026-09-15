@@ -25,7 +25,11 @@ CI/CD e orquestração de retreino — como foco de avaliação, não a acuráci
 - [Resultados](#resultados)
 - [Stack](#stack)
 - [Estrutura do Projeto](#estrutura-do-projeto)
-- [Início Rápido](#início-rápido)
+- [Como Executar o Projeto](#como-executar-o-projeto)
+  - [Etapa 1 — Gerar o modelo](#etapa-1--gerar-o-modelo)
+  - [Etapa 2 — Subir a API e a stack de observabilidade](#etapa-2--subir-a-api-e-a-stack-de-observabilidade)
+  - [Etapa 3 — Rodar a orquestração (Airflow)](#etapa-3--rodar-a-orquestração-airflow)
+  - [Etapa 4 — Qualidade (lint, testes, CI)](#etapa-4--qualidade-lint-testes-ci)
 - [API de Triagem (Serving)](#api-de-triagem-serving)
 - [Otimização de Latência](#otimização-de-latência)
 - [Decisão de Nuvem](#decisão-de-nuvem)
@@ -171,7 +175,7 @@ triagem_medica_nlp/
 
 ---
 
-## Início Rápido
+## Como Executar o Projeto
 
 **Pré-requisitos por caminho** — os dois não pedem a mesma coisa:
 
@@ -232,6 +236,9 @@ ao piso do gate (`MIN_MACRO_F1`, default 0,50); se aprovar, `models/current/` pa
 arquivos (`pipeline.joblib`, `pipeline.onnx`, `pipeline.int8.onnx`, `model_meta.json`) — é o que
 as próximas etapas servem.
 
+Isso rodou o pipeline uma vez, na mão. A Etapa 3 mostra esse mesmo pipeline rodando
+**orquestrado** — agendado, com gate e histórico —, que é o que o projeto entrega de verdade.
+
 ### Etapa 2 — Subir a API e a stack de observabilidade
 
 ```bash
@@ -248,8 +255,9 @@ curl -X POST http://localhost:8000/predict \
 ```
 
 Onde olhar agora que a stack subiu: Grafana em `localhost:3000` (`admin`/`admin`) e Prometheus
-em `localhost:9090/targets` — os 6 painéis já provisionados aparecem vazios até haver tráfego
-(detalhes de painéis, métricas e alertas em [Observabilidade](#observabilidade)).
+em `localhost:9090/targets` — os 6 painéis já provisionados aparecem vazios até haver tráfego.
+Esta etapa é só o passo a passo pra ver funcionando; a seção
+[Observabilidade](#observabilidade) explica o que cada painel e métrica significa.
 
 > Só a API, sem Prometheus/Grafana: `make serve` (Poetry, local, `localhost:8000`) ou
 > `make docker-serve-all` (as duas em container, sem observabilidade).
@@ -259,6 +267,12 @@ em `localhost:9090/targets` — os 6 painéis já provisionados aparecem vazios 
 healthy.
 
 ### Etapa 3 — Rodar a orquestração (Airflow)
+
+Por que rodar de novo, se a Etapa 1 já treinou e promoveu o modelo? Porque a Etapa 1 rodou o
+pipeline **uma vez, na mão**. A DAG é o mesmo pipeline **operado**: agendada (`@weekly`), com o
+gate barrando modelo ruim antes de promover, histórico de execuções e log por task — não é
+redundância, é a diferença entre executar e operar, e é o critério de Orquestração que o
+enunciado cobra.
 
 ```bash
 make airflow-up   # gera airflow/.env na 1ª vez, builda a imagem do Airflow (1ª vez, ~10 min) e sobe postgres, webserver, scheduler e dag-processor — localhost:8080
@@ -384,6 +398,11 @@ detalhados no ADR.
 ---
 
 ## Observabilidade
+
+Se você já passou pela Etapa 2 de [Como Executar o Projeto](#como-executar-o-projeto), a stack
+já está de pé — o comando abaixo é o mesmo da etapa, repetido aqui para quem veio direto para
+esta seção. O que muda é o foco: lá é o passo a passo, aqui é a explicação de cada painel,
+métrica e alerta.
 
 ```bash
 make monitoring-up      # api-sklearn, api-onnx, prometheus e grafana, do zero — build só na primeira vez
