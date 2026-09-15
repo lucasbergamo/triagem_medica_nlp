@@ -8,9 +8,13 @@ Existe por dois motivos, nenhum deles é medir inferência pura:
    diferente da medição isolada de `scripts/benchmark_latency.py`. Confundir as duas é o erro
    clássico a evitar: a diferença entre elas é justamente o overhead de rede/framework.
 
-Uso:
+Uso, a partir do host (as APIs expostas em 8000 e 8001):
     poetry run python scripts/load_test.py --rps 10 --duracao 60 --backend sklearn
     poetry run python scripts/load_test.py --rps 10 --duracao 60 --backend onnx
+
+Uso de dentro da rede do compose (onde as duas APIs escutam na 8000 e o mapeamento para a
+8001 não existe), com o endereço explícito:
+    python scripts/load_test.py --base-url http://api-sklearn:8000 --backend sklearn
 """
 
 from __future__ import annotations
@@ -105,9 +109,18 @@ def main() -> None:
     parser.add_argument(
         "--host", default="localhost", help="Host onde as APIs estão escutando (default localhost)."
     )
+    parser.add_argument(
+        "--base-url",
+        default=None,
+        help=(
+            "Endereço completo da API, sobrepondo --host e a porta do --backend. Necessário de "
+            "dentro da rede do compose, onde as duas APIs escutam na 8000 e o mapeamento para a "
+            "8001 só existe no host (ex.: http://api-onnx:8000)."
+        ),
+    )
     args = parser.parse_args()
 
-    base_url = f"http://{args.host}:{PORTA_POR_BACKEND[args.backend]}"
+    base_url = args.base_url or f"http://{args.host}:{PORTA_POR_BACKEND[args.backend]}"
     resumo = asyncio.run(gerar_carga(base_url, args.rps, args.duracao))
     print(
         f"{args.backend}: {resumo['n_requisicoes']} requisições, "
