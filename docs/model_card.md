@@ -17,10 +17,23 @@ para origem, licença e a construção completa do rótulo. Resumo relevante par
 
 Pipeline de dois estágios (`src/models/train.py`):
 
-```
-TfidfVectorizer(ngram_range=(1, 2), min_df=3, max_features=50_000,
-                sublinear_tf=True, strip_accents="unicode", lowercase=True)
-→ LogisticRegression(class_weight="balanced", max_iter=1000, C=1.0)
+```python
+Pipeline([
+    ("tfidf", TfidfVectorizer(
+        ngram_range=(1, 2),
+        min_df=3,
+        max_features=50_000,
+        sublinear_tf=True,
+        strip_accents="unicode",
+        lowercase=True,
+    )),
+    ("clf", LogisticRegression(
+        class_weight="balanced",
+        max_iter=1000,
+        C=1.0,
+        random_state=seed,
+    )),
+])
 ```
 
 Escolhido sobre Random Forest (o exemplo do enunciado) porque converte a inferência inteira
