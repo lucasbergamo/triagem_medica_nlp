@@ -147,7 +147,13 @@ services:
     # imagem Debian/Python; o arquivo não precisa sobreviver ao container (`--rm`).
     environment:
       - COVERAGE_FILE=/tmp/.coverage
-    command: ["pytest", "tests/", "-v", "--tb=short", "--cov=src", "--cov-report=term-missing"]
+    # -p no:cacheprovider: mesma causa do COVERAGE_FILE acima. O pytest grava .pytest_cache em
+    # /app (raiz da imagem, root-owned, não um volume montado) e o uid do host não escreve ali,
+    # o que enchia a saída de `make docker-test` com um PytestCacheWarning de permissão negada
+    # — ruído, não falha. Desligar o plugin é preferível a redirecionar o diretório: a única
+    # coisa que esse cache habilita é `--lf`/`--ff` entre execuções, e o container é `--rm`.
+    command:
+      ["pytest", "tests/", "-v", "--tb=short", "-p", "no:cacheprovider", "--cov=src", "--cov-report=term-missing"]
     volumes:
       - ./data:/app/data
       - ./models:/app/models
