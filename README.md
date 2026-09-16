@@ -301,9 +301,8 @@ enunciado cobra.
 make airflow-up   # gera airflow/.env na 1ª vez, builda a imagem do Airflow (1ª vez, ~10 min) e sobe postgres, webserver, scheduler e dag-processor — localhost:8080
 ```
 
-Abra `localhost:8080` — usuário e senha de admin foram gerados agora em `airflow/.env`, pelo
-comando acima (ver [Orquestração](#orquestração-airflow) para onde encontrá-los). A DAG
-`treino_triagem` já sobe **ativa**: entre nela e dispare direto, sem precisar despausar.
+Abra `localhost:8080` e entre com **`admin` / `admin`**, as mesmas credenciais do Grafana. A
+DAG `treino_triagem` já sobe **ativa**: entre nela e dispare direto, sem precisar despausar.
 
 Para ver a demonstração mais forte do projeto — o gate de qualidade barrando um modelo que não
 atinge o piso —, dispare de novo pela UI usando "Trigger DAG w/ config" com:
@@ -493,9 +492,15 @@ make airflow-up      # gera airflow/.env na 1ª vez, builda a imagem do Airflow 
 ```
 
 `make airflow-up` gera `airflow/.env` automaticamente na primeira vez, a partir de
-`airflow/.env.example`, com os segredos (senha do Postgres, senha do admin, chave Fernet, dois
-secrets de API) preenchidos na hora — a senha do admin da UI fica dentro desse arquivo. Rodar de
-novo não sobrescreve um `airflow/.env` já existente.
+`airflow/.env.example`, preenchendo na hora as três chaves criptográficas que o Airflow exige
+(Fernet e dois secrets de API). Rodar de novo não sobrescreve um `airflow/.env` já existente.
+
+O login da UI é **`admin` / `admin`**, fixo, igual ao do Grafana. A senha do Postgres também é
+fixa (`airflow_local`). São as credenciais que uma pessoa digita, e gerá-las aleatoriamente
+custaria mais do que protegeria: nenhum serviço desta stack é exposto para fora da máquina, o
+Postgres nem publica porta no host, e senha aleatória na UI obriga quem só quer avaliar o
+projeto a caçar um arquivo antes de ver a DAG rodando. Só as chaves que ninguém digita são
+geradas, porque aí o custo é zero.
 
 A DAG `treino_triagem` já sobe **ativa e agendada** (`AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION:
 "false"`) — diferente do default do Airflow, pensado para ambientes com dezenas de DAGs, onde
@@ -547,6 +552,17 @@ Correspondência com a DAG de referência da disciplina (`prepare → train → 
 
 ```bash
 make airflow-down     # docker compose down — sem -v: o volume do Postgres do Airflow continua
+```
+
+**Se o `airflow-init` falhar com `password authentication failed for user "airflow"`:** é um
+volume de Postgres sobrevivente de uma versão anterior do projeto, que gerava a senha do banco
+aleatoriamente. O Postgres só lê `POSTGRES_PASSWORD` ao inicializar um volume vazio, então o
+banco antigo continua esperando a senha de então e nada no `airflow/.env` alcança ele. O alvo
+abaixo apaga só o volume do metadata DB (preservando as métricas do Prometheus e do Grafana) e
+sobe a stack de novo:
+
+```bash
+make airflow-reset
 ```
 
 ---
