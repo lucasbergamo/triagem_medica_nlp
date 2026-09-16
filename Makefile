@@ -2,7 +2,7 @@
 	docker-serve docker-serve-onnx docker-serve-all docker-pipeline docker-lint docker-test \
 	docker-load-test \
 	benchmark benchmark-comparar monitoring-up monitoring-down load-test airflow-up \
-	airflow-down dag-test clean
+	airflow-down airflow-reset dag-test clean
 
 # Uid/gid do host: o Compose dá precedência a variável de ambiente do shell sobre o valor de
 # --env-file ou de default no próprio compose.yml, então isso vale para qualquer pessoa que
@@ -132,6 +132,18 @@ airflow-up:
 
 airflow-down:
 	docker compose --env-file airflow/.env down $(AIRFLOW_SERVICES)
+
+# Recria o metadata DB do Airflow do zero e sobe a stack de novo. Serve para quando o
+# `airflow-init` falha com `password authentication failed for user "airflow"`: o Postgres só
+# lê POSTGRES_PASSWORD ao inicializar um volume vazio, então um volume deixado por uma versão
+# anterior do projeto (que gerava essa senha aleatoriamente) segue esperando a senha de então,
+# e nenhuma mudança no airflow/.env alcança ele. `docker compose down -v` também resolveria,
+# mas levaria junto os volumes do Prometheus e do Grafana, apagando o histórico de métricas —
+# por isso o volume é removido pelo nome (prefixo `triagem`, de `name:` no compose raiz).
+airflow-reset:
+	docker compose --env-file airflow/.env down $(AIRFLOW_SERVICES)
+	docker volume rm -f triagem_airflow_postgres_data
+	$(MAKE) airflow-up
 
 dag-test:
 	docker compose --env-file airflow/.env build airflow-scheduler
